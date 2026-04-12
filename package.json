@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/main.js",
   "author": "Naver Auto Dev Team",
-  "homepage": "https://github.com/user/naver-auto",
+  "homepage": "https://github.com/NaverAutomation/NaverAutomation",
   "bin": {
     "naver-auto": "bin/cli.js"
   },

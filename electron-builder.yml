@@ -20,5 +20,6 @@ nsis:
   shortcutName: Naver Auto
 publish:
   provider: github
-  owner: user # 여기에 본인의 GitHub ID를 입력하세요
-  repo: naver-auto # 여기에 레포지토리 이름을 입력하세요
+  owner: NaverAutomation
+  repo: NaverAutomation
+  releaseType: release
