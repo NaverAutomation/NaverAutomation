@@ -1,0 +1,12 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+@theme {
+  --font-sans: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply antialiased text-base-content bg-base-100;
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "name": "naver-auto",
+  "version": "1.0.0",
+  "description": "Naver Blog Automation with AI",
+  "type": "module",
+  "main": "src/main.js",
+  "author": "Naver Auto Dev Team",
+  "homepage": "https://github.com/user/naver-auto",
+  "bin": {
+    "naver-auto": "bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node src/server/index.js",
+    "dev": "vite",
+    "build": "vite build",
+    "electron:dev": "cross-env NODE_ENV=development electron .",
+    "electron:build": "npm run build && electron-builder build --win --publish never"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.1",
+    "electron-updater": "^6.8.3",
+    "express": "^5.2.1",
+    "open": "^11.0.0",
+    "openai": "^6.34.0",
+    "playwright": "^1.59.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "socket.io": "^4.8.3",
+    "sqlite3": "^6.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.4.27",
+    "cross-env": "^10.1.0",
+    "daisyui": "^5.5.19",
+    "electron": "^41.2.0",
+    "electron-builder": "^26.8.1",
+    "postcss": "^8.5.9",
+    "tailwindcss": "^4.2.2",
+    "vite": "^8.0.8"
+  }
+}

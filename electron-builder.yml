@@ -1,0 +1,24 @@
+appId: com.naverauto.app
+productName: Naver Auto
+directories:
+  output: dist_electron
+  buildResources: assets
+files:
+  - "dist/**/*"
+  - "src/**/*"
+  - "package.json"
+  - "node_modules/**/*"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Naver Auto
+publish:
+  provider: github
+  owner: user # 여기에 본인의 GitHub ID를 입력하세요
+  repo: naver-auto # 여기에 레포지토리 이름을 입력하세요
