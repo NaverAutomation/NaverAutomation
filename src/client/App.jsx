@@ -11,6 +11,10 @@ import EditTab from './components/tabs/EditTab';
 import ScheduledTab from './components/tabs/ScheduledTab';
 import LogsTab from './components/tabs/LogsTab';
 
+// Auth
+import Login from './components/Login.jsx';
+import { supabase } from './utils/supabase.js';
+
 const TABS = [
   { id: 'dashboard', label: '🏠 대시보드' },
   { id: 'settings',  label: '⚙️ 설정' },
@@ -22,6 +26,7 @@ const TABS = [
 ];
 
 const App = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [taskStatus, setTaskStatus] = useState({ isRunning: false, queueLength: 0 });
   const [realtimeLogs, setRealtimeLogs] = useState([]);
@@ -30,8 +35,24 @@ const App = () => {
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [settings, setSettings] = useState({ openai_api_key: '', gemini_api_key: '' });
 
+  // ── Auth 세션 관리
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAuthenticated(!!session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   // ── 데이터 페칭
   const fetchAll = useCallback(async () => {
+    if (!isAuthenticated) return;
     try {
       const [acc, ps, sched, sets, taskSt] = await Promise.all([
         apiFetch('/api/accounts'),
@@ -48,7 +69,7 @@ const App = () => {
     } catch (err) {
       console.error('데이터 로드 오류:', err);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   // ── Socket 연동
   const onLog = useCallback((log) => {
@@ -76,6 +97,14 @@ const App = () => {
     }
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
+  if (!isAuthenticated) {
+    return <Login onLogin={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <div className="min-h-screen bg-base-100 flex flex-col font-sans text-base-content antialiased">
       {/* ── Header */}
@@ -97,6 +126,13 @@ const App = () => {
             className={`btn shadow-sm hover:scale-[1.02] transition-transform ${taskStatus.isRunning ? 'btn-error' : 'btn-success'}`}
           >
             {taskStatus.isRunning ? '⏹ 작업 정지' : '▶ 작업 시작'}
+          </button>
+          <button 
+            onClick={handleLogout}
+            className="btn btn-ghost btn-sm sm:btn-md"
+            title="로그아웃"
+          >
+            🚪 로그아웃
           </button>
         </div>
       </header>
