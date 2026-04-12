@@ -46,7 +46,36 @@ io.on('connection', (socket) => {
   });
 });
 
-httpServer.listen(CONFIG.PORT, () => {
-  console.log(`✅ Server running on http://localhost:${CONFIG.PORT}`);
-  console.log(`📡 Socket.io enabled`);
-});
+export const startServer = (initialPort = CONFIG.PORT) => {
+  return new Promise((resolve, reject) => {
+    let currentPort = initialPort;
+    const maxRetries = 10;
+    let tryCount = 0;
+
+    const tryListen = (port) => {
+      httpServer.listen(port, () => {
+        console.log(`✅ Server running on http://localhost:${port}`);
+        console.log(`📡 Socket.io enabled`);
+        resolve({ server: httpServer, port });
+      });
+
+      httpServer.once('error', (err) => {
+        if (err.code === 'EADDRINUSE' && tryCount < maxRetries) {
+          console.warn(`[Server] Port ${port} is already in use. Trying next...`);
+          tryCount++;
+          tryListen(port + 1);
+        } else {
+          console.error(`[Server] Port ${port} listen error:`, err);
+          reject(err);
+        }
+      });
+    };
+
+    tryListen(currentPort);
+  });
+};
+
+// 직접 실행될 때만 서버를 시작 (예: node src/server/index.js)
+if (process.argv[1] && process.argv[1].endsWith('index.js')) {
+  startServer();
+}

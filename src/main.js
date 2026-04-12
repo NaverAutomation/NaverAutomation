@@ -1,30 +1,52 @@
 import { app, BrowserWindow, dialog } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn } from 'child_process';
 import pkgUpdater from 'electron-updater';
+import fs from 'fs';
+
 const { autoUpdater } = pkgUpdater;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// 로그 파일 설정 (앱 시작 즉시 실행)
+const logPath = path.join(app.getPath('userData'), 'logs.txt');
+function log(msg) {
+  const timestamp = new Date().toISOString();
+  const fullMsg = `[${timestamp}] ${msg}\n`;
+  console.log(msg);
+  try { fs.appendFileSync(logPath, fullMsg); } catch (e) {}
+}
+
+// 초기화 전역 에러 핸들러
+process.on('uncaughtException', (err) => {
+  log(`[CRASH] Uncaught Exception: ${err.message}\n${err.stack}`);
+});
+
+log('[Main] App starting...');
+
 let mainWindow;
-let serverProcess;
+let server;
+let serverPort = 3000;
 
-function createServer() {
-  // src/server/index.js를 실행하는 자식 프로세스 생성
-  const serverPath = path.join(__dirname, 'server/index.js');
-  serverProcess = spawn('node', [serverPath], {
-    env: { ...process.env, NODE_ENV: 'production' },
-    stdio: 'inherit'
-  });
-
-  serverProcess.on('error', (err) => {
-    console.error('Failed to start server:', err);
-  });
+async function initBackend() {
+  log('[Main] Backend initializing...');
+  try {
+    // 백엔드를 동적으로 분리하여 로드 (네이티브 모듈 크래시 방지용)
+    const { startServer } = await import('./server/index.js');
+    const result = await startServer();
+    server = result.server;
+    serverPort = result.port;
+    log(`[Main] Backend started successfully on port ${serverPort}`);
+  } catch (err) {
+    log(`[Main] Backend failed: ${err.message}`);
+    log(`[Main] Error Stack: ${err.stack}`);
+    dialog.showErrorBox('서버 시작 실패', '백엔드 서버를 시작하지 못했습니다: ' + err.message);
+  }
 }
 
 function createWindow() {
+  log('[Main] Creating window...');
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -32,13 +54,33 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
-    icon: path.join(__dirname, '../assets/icon.ico')
+    icon: path.join(__dirname, '../assets/icon.png')
   });
 
-  // 서버가 뜰 때까지 잠시 대기 후 로드 (간단하게 2초)
-  setTimeout(() => {
-    mainWindow.loadURL('http://localhost:3000');
-  }, 2000);
+  const targetURL = `http://localhost:${serverPort}`;
+  let retryCount = 0;
+
+  const loadApp = () => {
+    log(`[Main] Loading URL: ${targetURL} (Try: ${retryCount + 1})`);
+    mainWindow.loadURL(targetURL).catch((err) => {
+      log(`[Main] Load URL failed: ${err.message}`);
+      if (retryCount < 5) {
+        retryCount++;
+        setTimeout(loadApp, 1000);
+      } else {
+        log('[Main] Max retries reached. Opening DevTools for diagnosis.');
+        mainWindow.webContents.openDevTools();
+        dialog.showMessageBox({
+          type: 'error',
+          title: '페이지 로드 실패',
+          message: '서버와 연결할 수 없습니다. 로그 파일을 확인하거나 개발자 도구의 에러 메시지를 확인해 주세요.',
+          buttons: ['확인']
+        });
+      }
+    });
+  };
+
+  loadApp();
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -107,8 +149,8 @@ function setupAutoUpdater() {
   });
 }
 
-app.whenReady().then(() => {
-  createServer();
+app.whenReady().then(async () => {
+  await initBackend();
   createWindow();
   setupAutoUpdater();
 
@@ -119,11 +161,12 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    if (serverProcess) serverProcess.kill();
     app.quit();
   }
 });
 
 app.on('quit', () => {
-  if (serverProcess) serverProcess.kill();
+  if (server && server.close) {
+    server.close();
+  }
 });
