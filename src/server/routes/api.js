@@ -300,12 +300,15 @@ router.post('/posts/:id/retry', (req, res) => {
 
 // POST /posts/schedule  ← 신규: 예약 포스팅 저장
 router.post('/posts/schedule', (req, res) => {
-  const { account_id, title, content, image_url, scheduled_at } = req.body;
+  const { account_id, title, content, image_url, scheduled_at, headless } = req.body;
   if (!title || !content) return res.status(400).json({ error: '제목과 내용은 필수입니다.' });
+  if (headless !== undefined && typeof headless !== 'boolean') {
+    return res.status(400).json({ error: 'headless는 boolean 타입이어야 합니다.' });
+  }
 
   const status = scheduled_at ? 'scheduled' : 'pending';
-  const sql = 'INSERT INTO posts (account_id, title, content, image_url, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?)';
-  db.run(sql, [account_id || null, title, content, image_url || null, scheduled_at || null, status], function(err) {
+  const sql = 'INSERT INTO posts (account_id, title, content, image_url, headless, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)';
+  db.run(sql, [account_id || null, title, content, image_url || null, headless === undefined ? null : (headless ? 1 : 0), scheduled_at || null, status], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ id: this.lastID, status, message: scheduled_at ? `${scheduled_at}에 발행 예약되었습니다.` : '대기열에 추가되었습니다.' });
   });
@@ -340,9 +343,12 @@ router.post('/posts/:id/publish-now', (req, res) => {
 
 // POST /post (즉시 발행)
 router.post('/post', async (req, res) => {
-  const { account_id, title, content, image_url } = req.body;
+  const { account_id, title, content, image_url, headless } = req.body;
   if (!account_id || !title || !content) {
     return res.status(400).json({ error: 'account_id, title, content는 필수입니다.' });
+  }
+  if (headless !== undefined && typeof headless !== 'boolean') {
+    return res.status(400).json({ error: 'headless는 boolean 타입이어야 합니다.' });
   }
 
   db.get('SELECT * FROM accounts WHERE id = ?', [account_id], async (err, account) => {
@@ -351,12 +357,16 @@ router.post('/post', async (req, res) => {
 
     try {
       const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
-      const result = await postToNaver(decryptedAccount, { title, content, image_url });
+      const result = await postToNaver(
+        decryptedAccount,
+        { title, content, image_url },
+        { headless }
+      );
 
       const status = result.success ? 'published' : 'failed';
       db.run(
-        'INSERT INTO posts (account_id, title, content, image_url, status) VALUES (?, ?, ?, ?, ?)',
-        [account_id, title, content, image_url || null, status],
+        'INSERT INTO posts (account_id, title, content, image_url, headless, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [account_id, title, content, image_url || null, headless === undefined ? null : (headless ? 1 : 0), status],
         (err) => { if (err) console.error('포스트 저장 오류:', err.message); }
       );
 

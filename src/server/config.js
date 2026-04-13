@@ -20,5 +20,5 @@ export const CONFIG = {
   PORT: process.env.PORT || 3000,
   DB_PATH: path.join(userDataPath, 'naver-auto.db'),
   SECRET_KEY: process.env.SECRET_KEY || 'default-secret-key',
-  HEADLESS: false,
+  HEADLESS: process.env.HEADLESS !== 'false',
 };

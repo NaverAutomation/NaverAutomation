@@ -19,14 +19,18 @@ async function downloadImage(url, dest) {
  * 네이버 블로그에 포스팅을 게시합니다.
  * @param {object} account 네이버 계정 정보 (naver_id, naver_pw)
  * @param {object} post 포스팅 내용 (title, content, image_url)
+ * @param {object} options 실행 옵션
+ * @param {boolean} options.headless 브라우저를 백그라운드(headless)로 실행할지 여부
  * @returns {Promise<{success: boolean, message: string}>}
  */
-export async function postToNaver(account, post) {
+export async function postToNaver(account, post, options = {}) {
   let browser;
   try {
-    // CONFIG.HEADLESS 설정에 따라 브라우저 동작 제어
+    const effectiveHeadless = typeof options.headless === 'boolean' ? options.headless : CONFIG.HEADLESS;
+
+    // 요청별 옵션 또는 기본 설정에 따라 브라우저 동작 제어
     browser = await chromium.launch({ 
-      headless: CONFIG.HEADLESS,
+      headless: effectiveHeadless,
       args: ['--disable-blink-features=AutomationControlled'] // 자동화 탐지 방지 시도
     });
     const context = await browser.newContext();
@@ -175,12 +179,47 @@ export async function postToNaver(account, post) {
     
     // 최종 발행 확인 버튼 대기 및 클릭 (팝업 내 발행 버튼)
     console.log('Waiting for final publish confirmation button...');
-    const finalPublishBtnSelector = '.confirm_btn__WEaBq, button[data-testid="seOnePublishBtn"], button[data-click-area="tpb*i.publish"]';
-    const finalPublishBtn = frame.locator(finalPublishBtnSelector).first();
-    
-    await finalPublishBtn.waitFor({ state: 'visible', timeout: 5000 });
-    await page.waitForTimeout(1500); // Wait for modal animation to settle
-    await finalPublishBtn.click();
+    await page.waitForTimeout(1200); // Wait for modal animation to settle
+
+    const finalPublishSelectors = [
+      'button[data-testid="seOnePublishBtn"]',
+      'button[data-click-area="tpb*i.publish"]',
+      '.confirm_btn__WEaBq',
+      '[role="dialog"] button:has-text("발행")',
+      '.ReactModal__Content button:has-text("발행")',
+    ];
+
+    let finalClicked = false;
+    for (const selector of finalPublishSelectors) {
+      const candidate = page.locator(selector).last();
+      const visible = await candidate.isVisible({ timeout: 4000 }).catch(() => false);
+      if (!visible) continue;
+
+      await candidate.click({ force: true });
+      finalClicked = true;
+      console.log(`Clicked final publish button using selector: ${selector}`);
+      break;
+    }
+
+    // Fallback: visible "발행" 버튼 중 마지막(대개 팝업 확인 버튼) 클릭
+    if (!finalClicked) {
+      const publishTextButtons = page.locator('button:has-text("발행")');
+      const btnCount = await publishTextButtons.count();
+      for (let i = btnCount - 1; i >= 0; i--) {
+        const button = publishTextButtons.nth(i);
+        const visible = await button.isVisible().catch(() => false);
+        if (!visible) continue;
+
+        await button.click({ force: true });
+        finalClicked = true;
+        console.log('Clicked final publish button using text fallback.');
+        break;
+      }
+    }
+
+    if (!finalClicked) {
+      throw new Error('Final publish confirmation button was not found after the first publish click.');
+    }
 
     // 발행 완료 후 잠시 대기
     await page.waitForTimeout(5000);
@@ -188,6 +227,12 @@ export async function postToNaver(account, post) {
     return { success: true, message: 'Successfully posted to Naver Blog' };
   } catch (error) {
     console.error('Naver posting error:', error);
+    if (error?.message?.includes("Executable doesn't exist")) {
+      return {
+        success: false,
+        message: 'Playwright 브라우저가 설치되지 않았습니다. 프로젝트 루트에서 "npx playwright install chromium" 또는 "npm run playwright:install"을 1회 실행해 주세요.',
+      };
+    }
     return { success: false, message: error.message };
   } finally {
     if (browser) {

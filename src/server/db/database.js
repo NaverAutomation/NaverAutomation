@@ -39,6 +39,7 @@ function initializeDatabase() {
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       image_url TEXT,
+      headless INTEGER,
       scheduled_at DATETIME,
       status TEXT DEFAULT 'pending',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -50,6 +51,7 @@ function initializeDatabase() {
         // 기존 DB에 컬럼 추가 (없을 경우)
         db.run("ALTER TABLE posts ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP", () => {});
         db.run("ALTER TABLE posts ADD COLUMN scheduled_at DATETIME", () => {});
+        db.run("ALTER TABLE posts ADD COLUMN headless INTEGER", () => {});
       }
     });
 

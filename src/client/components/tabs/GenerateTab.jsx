@@ -12,6 +12,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [useRoundRobin, setUseRoundRobin] = useState(true);
+  const [headless, setHeadless] = useState(true);
 
   useEffect(() => {
     if (accounts.length > 0 && !selectedAccountId) {
@@ -49,6 +50,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
             title: generated.title,
             content: generated.content,
             image_url: generated.imageUrl,
+            headless,
           }),
         });
         alert(data.message || '발행 완료!');
@@ -60,6 +62,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
             title: generated.title,
             content: generated.content,
             image_url: generated.imageUrl,
+            headless,
           }),
         });
         alert('라운드로빈 큐에 추가되었습니다. 스케줄러를 시작하면 자동 발행됩니다.');
@@ -83,6 +86,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
           title: generated.title,
           content: generated.content,
           image_url: generated.imageUrl,
+          headless,
           scheduled_at: new Date(scheduledAt).toISOString(),
         }),
       });
@@ -197,6 +201,16 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
                 onChange={e => setScheduledAt(e.target.value)}
                 className="input input-bordered w-full bg-base-100 font-medium"
               />
+            </div>
+
+            <div className="flex-1">
+              <label className="label-text font-bold block mb-3 text-base-content/80">🖥️ 브라우저 실행 방식</label>
+              <div className="form-control bg-base-100 p-3 rounded-lg border border-base-300 shadow-inner">
+                <label className="label cursor-pointer justify-start gap-4 py-0">
+                  <input type="checkbox" className="toggle toggle-primary" checked={headless} onChange={e => setHeadless(e.target.checked)} />
+                  <span className="label-text font-bold">백그라운드(headless)로 실행</span>
+                </label>
+              </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">

@@ -38,6 +38,12 @@ If you want to clone and run the project locally:
    ```bash
    npm install
    ```
+   This project automatically installs the Playwright Chromium browser during installation.
+
+   If browser installation fails due to network/security policy, run:
+   ```bash
+   npm run playwright:install
+   ```
 
 3. Build the client:
    ```bash

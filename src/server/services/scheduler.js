@@ -97,16 +97,16 @@ export async function processScheduledPosts() {
     [now],
     async (err, posts) => {
       if (err) {
-        emitLog('error', `예약 포스트 조회 오류: ${err.message}`);
+        emitLog('error', `Failed to load scheduled posts: ${err.message}`);
         return;
       }
       if (!posts || posts.length === 0) return;
 
-      emitLog('info', `예약 포스트 ${posts.length}개 발행 시작...`);
+      emitLog('info', `Starting publication for ${posts.length} scheduled post(s)...`);
 
       for (const post of posts) {
         if (!isRunning) {
-          emitLog('info', '작업이 정지되어 예약 발행을 중단합니다.');
+          emitLog('info', 'Scheduler stopped. Halting scheduled publication.');
           break;
         }
 
@@ -128,30 +128,32 @@ export async function processScheduledPosts() {
           }
 
           if (!account) {
-            emitLog('error', `포스트 #${post.id}: 사용 가능한 계정이 없습니다.`);
+            emitLog('error', `Post #${post.id}: No available account.`);
             db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
             continue;
           }
 
           const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
-          emitLog('info', `포스트 #${post.id} "${post.title}" → ${decryptedAccount.naver_id} 계정으로 발행 시도...`);
+          emitLog('info', `Post #${post.id} "${post.title}" -> Attempting publish with account ${decryptedAccount.naver_id}...`);
 
           const result = await postToNaver(decryptedAccount, {
             title: post.title,
             content: post.content,
             image_url: post.image_url,
+          }, {
+            headless: post.headless === null || post.headless === undefined ? undefined : Boolean(post.headless),
           });
 
           const newStatus = result.success ? 'published' : 'failed';
           db.run("UPDATE posts SET status = ? WHERE id = ?", [newStatus, post.id]);
 
           if (result.success) {
-            emitLog('success', `포스트 #${post.id} "${post.title}" 발행 완료!`);
+            emitLog('success', `Post #${post.id} "${post.title}" published successfully.`);
           } else {
-            emitLog('error', `포스트 #${post.id} 발행 실패: ${result.message}`);
+            emitLog('error', `Post #${post.id} publish failed: ${result.message}`);
           }
         } catch (error) {
-          emitLog('error', `포스트 #${post.id} 처리 오류: ${error.message}`);
+          emitLog('error', `Post #${post.id} processing error: ${error.message}`);
           db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
         }
       }
@@ -166,12 +168,12 @@ export async function processScheduledPosts() {
  */
 export function startScheduler() {
   if (isRunning) {
-    emitLog('warn', '스케줄러가 이미 실행 중입니다.');
+    emitLog('warn', 'Scheduler is already running.');
     return false;
   }
 
   isRunning = true;
-  emitLog('success', '자동화 작업이 시작되었습니다. 예약 포스트를 1분마다 확인합니다.');
+  emitLog('success', 'Automation started. Scheduled posts are checked every minute.');
   emitTaskStatus();
 
   // 즉시 한 번 실행 후 1분마다 반복
@@ -185,7 +187,7 @@ export function startScheduler() {
  */
 export function stopScheduler() {
   if (!isRunning) {
-    emitLog('warn', '스케줄러가 이미 정지 상태입니다.');
+    emitLog('warn', 'Scheduler is already stopped.');
     return false;
   }
 
@@ -194,7 +196,7 @@ export function stopScheduler() {
     clearInterval(schedulerInterval);
     schedulerInterval = null;
   }
-  emitLog('info', '자동화 작업이 정지되었습니다.');
+  emitLog('info', 'Automation stopped.');
   emitTaskStatus();
   return true;
 }
