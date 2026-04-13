@@ -10,6 +10,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+      pull-requests: read
 
     steps:
       - name: Check out Git repository
@@ -26,6 +27,11 @@ jobs:
 
       - name: Build Web App
         run: npm run build
+
+      - name: Release Drafter
+        uses: release-drafter/release-drafter@v7.2.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Publish Electron App
         run: npx electron-builder build --win --publish always
