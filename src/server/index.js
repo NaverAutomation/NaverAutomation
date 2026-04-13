@@ -7,6 +7,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { CONFIG } from './config.js';
 import apiRouter from './routes/api.js';
 import { setIO } from './services/scheduler.js';
+import { requireAuth } from './middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,7 +25,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(cors());
 
 // API Routes
-app.use('/api', apiRouter);
+app.use('/api', requireAuth, apiRouter);
 
 // Serve static files from dist
 const distPath = path.join(__dirname, '../../dist');

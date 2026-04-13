@@ -37,8 +37,8 @@ const App = () => {
 
   // ── Auth 세션 관리
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsAuthenticated(!!session);
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setIsAuthenticated(!!user);
     });
 
     const {
