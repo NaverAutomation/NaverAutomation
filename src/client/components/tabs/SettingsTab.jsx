@@ -46,10 +46,7 @@ const SettingsTab = React.memo(({ settings, setSettings, fetchAll }) => {
             value={localSettings.gemini_model || 'auto'}
             onChange={e => setLocalSettings({ ...localSettings, gemini_model: e.target.value })}
           >
-            <option value="auto">✨ 자동 선택 (Lite 우선 / 지출 한도 보호)</option>
-            <option value="gemini-3.1-flash-lite">⚡ Gemini 3.1 Flash-Lite (완전 무료 권장)</option>
-            <option value="gemini-3-flash">🚀 Gemini 3 Flash (속도/성능 밸런스)</option>
-            <option value="gemini-3.1-pro">🧠 Gemini 3.1 Pro (고품질/유료 가능성 있음)</option>
+            <option value="auto">✨ 자동 선택</option>
           </select>
           <p className="text-[11px] px-1 text-base-content/50">* Pro 모델 사용 중 쿼터 초과 시 자동으로 Flash로 전환됩니다.</p>
         </div>

@@ -17,12 +17,12 @@ import { supabase } from './utils/supabase.js';
 
 const TABS = [
   { id: 'dashboard', label: '🏠 대시보드' },
-  { id: 'settings',  label: '⚙️ 설정' },
   { id: 'accounts',  label: '👤 계정 관리' },
   { id: 'generate',  label: '✍️ 글 생성' },
   { id: 'edit',      label: '📝 글 수정' },
   { id: 'scheduled', label: '📅 예약 목록' },
   { id: 'logs',      label: '📊 로그' },
+  { id: 'settings',  label: '⚙️ 설정' },
 ];
 
 const App = () => {
