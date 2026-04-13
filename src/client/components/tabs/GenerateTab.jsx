@@ -2,6 +2,165 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 import { Card, SectionTitle, Input, Btn, Textarea } from '../common';
 
+const ManualComposeCard = React.memo(({ accounts, fetchAll }) => {
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualContent, setManualContent] = useState('');
+  const [manualImageUrl, setManualImageUrl] = useState('');
+  const [manualPosting, setManualPosting] = useState(false);
+  const [manualScheduling, setManualScheduling] = useState(false);
+  const [manualSelectedAccountId, setManualSelectedAccountId] = useState('');
+  const [manualScheduledAt, setManualScheduledAt] = useState('');
+  const [manualUseRoundRobin, setManualUseRoundRobin] = useState(true);
+  const [manualHeadless, setManualHeadless] = useState(true);
+
+  useEffect(() => {
+    if (accounts.length > 0 && !manualSelectedAccountId) {
+      setManualSelectedAccountId(accounts[0].id.toString());
+    }
+  }, [accounts, manualSelectedAccountId]);
+
+  const handleManualPost = async () => {
+    if (!manualTitle.trim() || !manualContent.trim()) return alert('제목과 본문을 입력하세요.');
+    if (!manualUseRoundRobin && !manualSelectedAccountId) return alert('계정을 선택하세요.');
+
+    setManualPosting(true);
+    try {
+      const accId = manualUseRoundRobin ? null : manualSelectedAccountId;
+      const payload = {
+        title: manualTitle,
+        content: manualContent,
+        image_url: manualImageUrl.trim() || null,
+        headless: manualHeadless,
+      };
+
+      if (accId) {
+        const data = await apiFetch('/api/post', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...payload,
+            account_id: accId,
+          }),
+        });
+        alert(data.message || '발행 완료!');
+      } else {
+        await apiFetch('/api/posts/schedule', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        alert('라운드로빈 큐에 추가되었습니다. 스케줄러를 시작하면 자동 발행됩니다.');
+      }
+
+      await fetchAll();
+    } catch (err) {
+      alert('수기 발행 실패: ' + err.message);
+    }
+    setManualPosting(false);
+  };
+
+  const handleManualSchedule = async () => {
+    if (!manualTitle.trim() || !manualContent.trim()) return alert('제목과 본문을 입력하세요.');
+    if (!manualScheduledAt) return alert('예약 시간을 설정하세요.');
+
+    setManualScheduling(true);
+    try {
+      const accId = manualUseRoundRobin ? null : manualSelectedAccountId;
+      const data = await apiFetch('/api/posts/schedule', {
+        method: 'POST',
+        body: JSON.stringify({
+          account_id: accId || null,
+          title: manualTitle,
+          content: manualContent,
+          image_url: manualImageUrl.trim() || null,
+          headless: manualHeadless,
+          scheduled_at: new Date(manualScheduledAt).toISOString(),
+        }),
+      });
+      alert(data.message || '예약 완료!');
+      await fetchAll();
+    } catch (err) {
+      alert('수기 예약 실패: ' + err.message);
+    }
+    setManualScheduling(false);
+  };
+
+  return (
+    <Card>
+      <SectionTitle>📝 수기 작성 발행</SectionTitle>
+      <div className="bg-base-100 p-6 rounded-2xl border border-base-300 shadow-inner">
+        <Input
+          label="포스트 제목"
+          className="font-bold text-lg"
+          type="text"
+          value={manualTitle}
+          onChange={e => setManualTitle(e.target.value)}
+        />
+        <Textarea
+          label="포스트 본문"
+          className="h-[300px] font-medium leading-8 text-base bg-base-100 border-base-300"
+          value={manualContent}
+          onChange={e => setManualContent(e.target.value)}
+        />
+        <Input
+          label="커버 이미지 URL (선택)"
+          type="text"
+          value={manualImageUrl}
+          onChange={e => setManualImageUrl(e.target.value)}
+        />
+      </div>
+
+      <div className="mt-8 p-6 bg-base-300/40 border border-base-300 rounded-2xl flex flex-col lg:flex-row gap-6 lg:items-end">
+        <div className="flex-1">
+          <label className="label-text font-bold block mb-3 text-base-content/80">🚀 어디에 발행할까요?</label>
+          <div className="form-control bg-base-100 p-3 rounded-lg border border-base-300 mb-3 shadow-inner">
+            <label className="label cursor-pointer justify-start gap-4 py-0">
+              <input type="checkbox" className="toggle toggle-primary" checked={manualUseRoundRobin} onChange={e => setManualUseRoundRobin(e.target.checked)} />
+              <span className="label-text font-bold">자동 라운드로빈 배정 (권장)</span>
+            </label>
+          </div>
+          {!manualUseRoundRobin && (
+            <select
+              value={manualSelectedAccountId}
+              onChange={e => setManualSelectedAccountId(e.target.value)}
+              className="select select-bordered w-full bg-base-100 font-semibold"
+            >
+              {accounts.map(a => <option key={a.id} value={a.id}>👉 {a.naver_id} 계정 ({a.status})</option>)}
+            </select>
+          )}
+        </div>
+
+        <div className="flex-1">
+          <label className="label-text font-bold block mb-3 text-base-content/80">📅 발행 예약시간 설정</label>
+          <input
+            type="datetime-local"
+            value={manualScheduledAt}
+            onChange={e => setManualScheduledAt(e.target.value)}
+            className="input input-bordered w-full bg-base-100 font-medium"
+          />
+        </div>
+
+        <div className="flex-1">
+          <label className="label-text font-bold block mb-3 text-base-content/80">🖥️ 브라우저 실행 방식</label>
+          <div className="form-control bg-base-100 p-3 rounded-lg border border-base-300 shadow-inner">
+            <label className="label cursor-pointer justify-start gap-4 py-0">
+              <input type="checkbox" className="toggle toggle-primary" checked={manualHeadless} onChange={e => setManualHeadless(e.target.checked)} />
+              <span className="label-text font-bold">백그라운드(headless)로 실행</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+          <Btn variant="warning" className="flex-1 lg:w-40" onClick={handleManualSchedule} disabled={manualScheduling || !manualScheduledAt || accounts.length === 0}>
+            {manualScheduling ? <span className="loading loading-spinner"></span> : '📅 수기 예약'}
+          </Btn>
+          <Btn variant="success" className="flex-1 lg:w-40" onClick={handleManualPost} disabled={manualPosting || accounts.length === 0}>
+            {manualPosting ? <span className="loading loading-spinner"></span> : '📝 수기 즉시송출'}
+          </Btn>
+        </div>
+      </div>
+    </Card>
+  );
+});
+
 const GenerateTab = React.memo(({ accounts, fetchAll }) => {
   const [keyword, setKeyword] = useState('');
   const [engine, setEngine] = useState('openai');
@@ -18,7 +177,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
     if (accounts.length > 0 && !selectedAccountId) {
       setSelectedAccountId(accounts[0].id.toString());
     }
-  }, [accounts]);
+  }, [accounts, selectedAccountId]);
 
   const handleGenerate = async () => {
     if (!keyword.trim()) return alert('키워드를 입력하세요.');
@@ -134,6 +293,8 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
         </div>
       </Card>
 
+      <ManualComposeCard accounts={accounts} fetchAll={fetchAll} />
+
       {generated && (
         <Card className="animate-in slide-in-from-bottom-4 duration-500">
           <div className="flex justify-between items-start mb-4">
@@ -164,7 +325,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
             
             {generated.imageUrl && (
               <div className="mt-8 bg-base-200 p-4 border border-base-300 rounded-xl shadow-sm">
-                <label className="label-text font-bold block mb-4 text-base-content flex items-center justify-between">
+                <label className="label-text font-bold mb-4 text-base-content flex items-center justify-between">
                   <span>🎨 AI 생성 커버 이미지 (DALL-E 3)</span>
                   <div className="badge badge-success">생성 완료</div>
                 </label>
