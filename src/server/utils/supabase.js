@@ -5,14 +5,26 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+export function getAuthenticatedClient(token) {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  });
+}
+
 /**
  * Get a user secret from Supabase.
  * @param {string} userId - User UUID
  * @param {string} key - Secret key
+ * @param {string} [token] - Optional user token to access RLS protected data
  * @returns {Promise<string|null>}
  */
-export async function getUserSecret(userId, key) {
-  const { data, error } = await supabase
+export async function getUserSecret(userId, key, token) {
+  const client = token ? getAuthenticatedClient(token) : supabase;
+  const { data, error } = await client
     .from('user_secrets')
     .select('value')
     .eq('user_id', userId)
@@ -31,12 +43,12 @@ export async function getUserSecret(userId, key) {
 /**
  * Get a global setting from Supabase.
  * @param {string} key - Global setting key
+ * @param {string} [token] - Optional user token to access RLS protected data
  * @returns {Promise<string|null>}
  */
-export async function getGlobalSetting(key) {
-  // Global settings usually require service_role, but for simplicity we enable read if you want
-  // Or we use the existing client if RLS allows it.
-  const { data, error } = await supabase
+export async function getGlobalSetting(key, token) {
+  const client = token ? getAuthenticatedClient(token) : supabase;
+  const { data, error } = await client
     .from('global_settings')
     .select('value')
     .eq('key', key)

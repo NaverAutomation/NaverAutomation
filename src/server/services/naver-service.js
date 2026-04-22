@@ -77,30 +77,38 @@ export async function postToNaver(account, post, options = {}) {
       }
     } catch (e) {}
 
-    // 3. 제목 입력 (인덱스 기반 셀렉터 적용)
+    // 3. 제목 입력 (유저 제공 셀렉터 .se-section-documentTitle 적용)
     console.log(`Typing title: ${post.title.substring(0, 20)}...`);
     try {
-      // 에디터 활성화를 위해 본문 영역 전체를 한 번 클릭
-      await frame.click('.se-editor-container', { force: true });
-      await page.waitForTimeout(500);
-
-      // 첫 번째 .se-component-content가 제목
-      const titleArea = frame.locator('.se-component-content').nth(0);
+      // 1) 제목 영역 찾기
+      const titleSelector = '.se-section-documentTitle';
+      const titleArea = frame.locator(titleSelector);
       await titleArea.waitFor({ state: 'visible', timeout: 10000 });
       
-      // 제목 영역을 확실하게 세 번 클릭하여 전체 선택 상태 유도
-      await titleArea.click({ clickCount: 3, force: true });
+      // 2) 확실한 포커스를 위해 클릭
+      await titleArea.click({ force: true });
       await page.waitForTimeout(500);
       
+      // 3) 기존 텍스트 전체 선택 후 삭제 (안전장치)
       await page.keyboard.press('Control+A');
       await page.keyboard.press('Backspace');
+      await page.waitForTimeout(300);
+      
+      // 4) 타이핑
       await page.keyboard.type(post.title, { delay: 50 });
       console.log('Title input completed.');
     } catch (e) {
       console.warn('Title input failed, trying fallback...', e.message);
-      await frame.click('body');
-      for (let i = 0; i < 5; i++) await page.keyboard.press('Tab');
-      await page.keyboard.type(post.title, { delay: 50 });
+      // Fallback: 인덱스 기반 시도
+      try {
+        const titleAreaFallback = frame.locator('.se-component-content').nth(0);
+        await titleAreaFallback.click({ force: true });
+        await page.keyboard.press('Control+A');
+        await page.keyboard.press('Backspace');
+        await page.keyboard.type(post.title, { delay: 50 });
+      } catch (e2) {
+        console.error('Title input critical failure:', e2.message);
+      }
     }
 
     // 4. 본문 입력 전 이미지 업로드 처리

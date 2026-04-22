@@ -4,7 +4,7 @@ import { CONFIG } from '../config.js';
 import { generateContent } from '../services/ai-service.js';
 import { postToNaver } from '../services/naver-service.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
-import { startScheduler, stopScheduler, getSchedulerStatus, processScheduledPosts } from '../services/scheduler.js';
+import { startScheduler, stopScheduler, getSchedulerStatus, processScheduledPosts, emitLog } from '../services/scheduler.js';
 import { getGlobalSetting } from '../utils/supabase.js';
 
 const router = express.Router();
@@ -28,9 +28,29 @@ router.post('/accounts', (req, res) => {
     return res.status(400).json({ error: 'naver_id와 naver_pw가 필요합니다.' });
   }
   const encryptedPw = encrypt(naver_pw);
-  db.run('INSERT INTO accounts (user_id, naver_id, naver_pw) VALUES (?, ?, ?)', [req.user.id, naver_id, encryptedPw], function(err) {
+  
+  // 기존 계정이 있는지 확인 (user_id가 NULL인 과거 데이터 호환성 처리)
+  db.get('SELECT id, user_id FROM accounts WHERE naver_id = ?', [naver_id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, naver_id, status: 'active' });
+    
+    if (row) {
+      if (!row.user_id) {
+        // 기존에 등록되었으나 user_id가 없는 계정(업데이트 전 데이터)인 경우, 현재 유저의 소유로 편입(업데이트)
+        db.run('UPDATE accounts SET user_id = ?, naver_pw = ? WHERE id = ?', [req.user.id, encryptedPw, row.id], function(err) {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ id: row.id, naver_id, status: 'active' });
+        });
+      } else {
+        // 이미 주인이 있는 경우
+        return res.status(400).json({ error: '이미 등록된 계정입니다.' });
+      }
+    } else {
+      // 신규 등록
+      db.run('INSERT INTO accounts (user_id, naver_id, naver_pw) VALUES (?, ?, ?)', [req.user.id, naver_id, encryptedPw], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ id: this.lastID, naver_id, status: 'active' });
+      });
+    }
   });
 });
 
@@ -128,7 +148,7 @@ router.post('/generate', async (req, res) => {
       const model = (await getSettingFromDB(req.user.id, 'ollama_model')) || 'llama3';
       aiConfig = { endpoint, model };
     } else {
-      const masterKey = await getGlobalSetting('master_gemini_api_key');
+      const masterKey = await getGlobalSetting('master_gemini_api_key', req.token);
       if (!masterKey || masterKey === 'YOUR_KEY_HERE') {
         return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
       }
@@ -177,7 +197,7 @@ router.post('/generate/edit', async (req, res) => {
       const data = await response.json();
       editedContent = data.response;
     } else {
-      const masterKey = await getGlobalSetting('master_gemini_api_key');
+      const masterKey = await getGlobalSetting('master_gemini_api_key', req.token);
       if (!masterKey || masterKey === 'YOUR_KEY_HERE') {
         return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
       }
@@ -319,7 +339,7 @@ router.post('/posts/:id/publish-now', (req, res) => {
     function(err) {
       if (err) return res.status(500).json({ error: err.message });
       processScheduledPosts();
-      res.json({ success: true });
+      res.json({ success: true, message: '스케줄러 백그라운드에서 강제 발행을 시작했습니다. (상태 업데이트까지 시간이 걸릴 수 있습니다.)' });
     }
   );
 });
@@ -336,6 +356,7 @@ router.post('/post', async (req, res) => {
     if (!account) return res.status(404).json({ error: '계정을 찾을 수 없습니다.' });
 
     try {
+      emitLog('info', `[수기 발행] 계정 ${account.naver_id}로 포스팅을 시작합니다.`, req.user.id);
       const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
       const result = await postToNaver(decryptedAccount, { title, content, image_url }, { headless });
 
@@ -344,9 +365,21 @@ router.post('/post', async (req, res) => {
         'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [req.user.id, account_id, title, content, image_url || null, headless ? 1 : 0, status]
       );
+      
+      if (result.success) {
+        // 성공 시 계정 카운트 및 순서 업데이트
+        db.run(
+          "UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?",
+          [new Date().toISOString().split('T')[0], account.id]
+        );
+        emitLog('success', `[수기 발행] 성공적으로 포스팅되었습니다: ${title}`, req.user.id);
+      } else {
+        emitLog('error', `[수기 발행] 포스팅 실패: ${result.message}`, req.user.id);
+      }
 
       res.json(result);
     } catch (error) {
+      emitLog('error', `[수기 발행] 작업 중 오류 발생: ${error.message}`, req.user.id);
       res.status(500).json({ error: error.message });
     }
   });

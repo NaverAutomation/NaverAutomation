@@ -83,11 +83,10 @@ function initializeDatabase() {
       value TEXT,
       PRIMARY KEY (user_id, key)
     )`, (err) => {
-      if (err) {
-        console.error('Error creating settings table:', err.message);
-        // 이미 존재하는 경우 user_id 컬럼 추가 시도
-        db.run("ALTER TABLE settings ADD COLUMN user_id TEXT", () => {});
-      }
+      if (err) console.error('Error creating settings table:', err.message);
+      
+      // 이미 존재하는 경우 user_id 컬럼 추가 시도 (없으면 추가됨, 있으면 무시됨)
+      db.run("ALTER TABLE settings ADD COLUMN user_id TEXT", () => {});
     });
 
     // Logs table (실시간 로그 저장)

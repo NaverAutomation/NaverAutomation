@@ -148,13 +148,20 @@ const ManualComposeCard = React.memo(({ accounts, fetchAll }) => {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-          <Btn variant="warning" className="flex-1 lg:w-40" onClick={handleManualSchedule} disabled={manualScheduling || !manualScheduledAt || accounts.length === 0}>
-            {manualScheduling ? <span className="loading loading-spinner"></span> : '📅 수기 예약'}
-          </Btn>
-          <Btn variant="success" className="flex-1 lg:w-40" onClick={handleManualPost} disabled={manualPosting || accounts.length === 0}>
-            {manualPosting ? <span className="loading loading-spinner"></span> : '📝 수기 즉시송출'}
-          </Btn>
+        <div className="flex flex-col w-full lg:w-auto">
+          {accounts.length === 0 && (
+            <div className="text-error text-sm font-bold mb-2 text-center bg-error/10 py-1 px-2 rounded-md">
+              ⚠️ 계정 관리 탭에서 네이버 계정을 먼저 등록해주세요.
+            </div>
+          )}
+          <div className="flex flex-col sm:flex-row gap-3 w-full">
+            <Btn variant="warning" className="flex-1 lg:w-40" onClick={handleManualSchedule} disabled={manualScheduling || !manualScheduledAt || accounts.length === 0}>
+              {manualScheduling ? <span className="loading loading-spinner"></span> : '📅 수기 예약'}
+            </Btn>
+            <Btn variant="success" className="flex-1 lg:w-40" onClick={handleManualPost} disabled={manualPosting || accounts.length === 0}>
+              {manualPosting ? <span className="loading loading-spinner"></span> : '📝 수기 즉시송출'}
+            </Btn>
+          </div>
         </div>
       </div>
     </Card>
@@ -361,13 +368,20 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-              <Btn variant="warning" className="flex-1 lg:w-40" onClick={handleSchedule} disabled={scheduling || !scheduledAt || accounts.length === 0}>
-                {scheduling ? <span className="loading loading-spinner"></span> : '📅 타이머 예약'}
-              </Btn>
-              <Btn variant="success" className="flex-1 lg:w-40" onClick={handlePost} disabled={posting || accounts.length === 0}>
-                {posting ? <span className="loading loading-spinner"></span> : '🚀 즉시 송출'}
-              </Btn>
+            <div className="flex flex-col w-full lg:w-auto">
+              {accounts.length === 0 && (
+                <div className="text-error text-sm font-bold mb-2 text-center bg-error/10 py-1 px-2 rounded-md">
+                  ⚠️ 계정 관리 탭에서 네이버 계정을 먼저 등록해주세요.
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row gap-3 w-full">
+                <Btn variant="warning" className="flex-1 lg:w-40" onClick={handleSchedule} disabled={scheduling || !scheduledAt || accounts.length === 0}>
+                  {scheduling ? <span className="loading loading-spinner"></span> : '📅 타이머 예약'}
+                </Btn>
+                <Btn variant="success" className="flex-1 lg:w-40" onClick={handlePost} disabled={posting || accounts.length === 0}>
+                  {posting ? <span className="loading loading-spinner"></span> : '🚀 즉시 송출'}
+                </Btn>
+              </div>
             </div>
           </div>
         </Card>

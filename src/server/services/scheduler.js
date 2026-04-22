@@ -22,7 +22,7 @@ export function setIO(socketIO) {
 /**
  * 실시간 로그 emit + DB 저장
  */
-function emitLog(level, message, userId = null) {
+export function emitLog(level, message, userId = null) {
   const log = { 
     level, 
     message, 
@@ -193,7 +193,11 @@ export function startScheduler() {
 
   // 즉시 실행 및 5분 간격 체크 (네이버 제재 방지를 위해 간격 유지)
   processAutomation();
-  schedulerInterval = setInterval(processAutomation, 5 * 60 * 1000);
+  processScheduledPosts();
+  schedulerInterval = setInterval(() => {
+    processAutomation();
+    processScheduledPosts();
+  }, 5 * 60 * 1000);
   return true;
 }
 
@@ -227,8 +231,83 @@ export function getSchedulerStatus() {
   };
 }
 
-// 구버전 호환용 (사용되지 않을 수 있음)
 export async function processScheduledPosts() {
-  // 새 루프에서 통합 처리되므로 구현 생략 가능하거나 새 루프 호출
-  processAutomation();
+  if (activeWorkers >= MAX_WORKERS) return;
+
+  db.all(
+    "SELECT * FROM posts WHERE status IN ('scheduled', 'pending') AND (scheduled_at IS NULL OR scheduled_at <= datetime('now', 'localtime'))",
+    [],
+    async (err, posts) => {
+      if (err) {
+        emitLog('error', `예약 포스트 조회 실패: ${err.message}`);
+        return;
+      }
+
+      for (const post of posts) {
+        if (activeWorkers >= MAX_WORKERS) break;
+
+        activeWorkers++;
+        emitTaskStatus();
+
+        try {
+          // 상태를 processing으로 변경하여 중복 실행 방지
+          await new Promise((resolve, reject) => {
+            db.run("UPDATE posts SET status = 'processing' WHERE id = ?", [post.id], function(err) {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+
+          // 1. 계정 확인
+          let account = null;
+          if (post.account_id) {
+            account = await new Promise((resolve, reject) => {
+              db.get("SELECT * FROM accounts WHERE id = ?", [post.account_id], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+              });
+            });
+          } else {
+            account = await getAvailableAccount(post.user_id);
+          }
+
+          if (!account) {
+            emitLog('warn', `예약 발행 실패: 사용 가능한 네이버 계정이 없습니다. (게시글: ${post.title})`, post.user_id);
+            db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
+            continue;
+          }
+
+          emitLog('info', `예약 포스트 [${post.title}] 발행을 시작합니다. (계정: ${account.naver_id})`, post.user_id);
+
+          // 2. 네이버 블로그 포스팅
+          const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
+          const postResult = await postToNaver(decryptedAccount, {
+            title: post.title,
+            content: post.content,
+            image_url: post.image_url,
+          }, { headless: post.headless === 1 });
+
+          if (postResult.success) {
+            // 성공 시 상태 업데이트 및 계정 카운트/순서 업데이트
+            db.run("UPDATE posts SET status = 'published', account_id = ? WHERE id = ?", [account.id, post.id]);
+            db.run(
+              "UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?",
+              [new Date().toISOString().split('T')[0], account.id]
+            );
+            emitLog('success', `예약 포스팅 성공: ${post.title}`, post.user_id);
+          } else {
+            db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
+            emitLog('error', `예약 포스팅 실패: ${postResult.message}`, post.user_id);
+          }
+
+        } catch (error) {
+          db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
+          emitLog('error', `예약 발행 중 오류 발생: ${error.message}`, post.user_id);
+        } finally {
+          activeWorkers--;
+          emitTaskStatus();
+        }
+      }
+    }
+  );
 }
