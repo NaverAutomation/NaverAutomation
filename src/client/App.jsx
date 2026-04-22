@@ -108,15 +108,23 @@ const App = () => {
   }, [isAuthenticated]);
 
   // ── Socket 연동
-  const onLog = useCallback((log) => {
-    setRealtimeLogs(prev => [...prev.slice(-199), log]);
-  }, []);
+  useEffect(() => {
+    const socket = window.io?.();
+    if (!socket) return;
 
-  const onTaskStatus = useCallback((status) => {
-    setTaskStatus(status);
-  }, []);
+    socket.on('log', (log) => {
+      setRealtimeLogs(prev => {
+        const next = [...prev, log];
+        return next.length > 200 ? next.slice(-200) : next;
+      });
+    });
 
-  useSocket(onLog, onTaskStatus);
+    socket.on('task-status', (status) => {
+      setTaskStatus(status);
+    });
+
+    return () => socket.disconnect();
+  }, []);
 
   useEffect(() => {
     const api = window.electronAPI;
@@ -300,65 +308,73 @@ const App = () => {
       {/* ── Content (Rule: rendering-conditional-render) */}
       <main className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex-1">
         <div className="animate-in fade-in duration-300">
-          {activeTab === 'dashboard' ? (
-            <DashboardTab 
-              accounts={accounts} 
-              posts={posts} 
-              scheduledPosts={scheduledPosts} 
-              taskStatus={taskStatus} 
-              realtimeLogs={realtimeLogs} 
-              fetchAll={fetchAll} 
-            />
-          ) : null}
-          {activeTab === 'settings' ? (
-            <SettingsTab 
-              settings={settings} 
-              setSettings={setSettings} 
-              fetchAll={fetchAll}
-              appVersion={appVersion}
-              latestVersion={latestVersion}
-              onManualUpdateCheck={handleManualUpdateCheck}
-              isCheckingUpdate={isCheckingUpdate}
-            />
-          ) : null}
-          {activeTab === 'accounts' ? (
-            <AccountsTab 
-              accounts={accounts} 
-              fetchAll={fetchAll} 
-            />
-          ) : null}
-          {activeTab === 'campaigns' ? (
-            <CampaignsTab 
-              campaigns={campaigns} 
-              fetchAll={fetchAll} 
-            />
-          ) : null}
-          {activeTab === 'generate' ? (
-            <GenerateTab 
-              accounts={accounts} 
-              fetchAll={fetchAll} 
-            />
-          ) : null}
-          {activeTab === 'edit' ? (
-            <EditTab />
-          ) : null}
-          {activeTab === 'scheduled' ? (
-            <ScheduledTab 
-              scheduledPosts={scheduledPosts} 
-              accounts={accounts} 
-              fetchAll={fetchAll} 
-            />
-          ) : null}
-          {activeTab === 'logs' ? (
-            <LogsTab 
-              realtimeLogs={realtimeLogs} 
-              setRealtimeLogs={setRealtimeLogs} 
-            />
-          ) : null}
+          <TabContent 
+            activeTab={activeTab}
+            accounts={accounts}
+            posts={posts}
+            scheduledPosts={scheduledPosts}
+            taskStatus={taskStatus}
+            realtimeLogs={realtimeLogs}
+            settings={settings}
+            setSettings={setSettings}
+            appVersion={appVersion}
+            latestVersion={latestVersion}
+            isCheckingUpdate={isCheckingUpdate}
+            fetchAll={fetchAll}
+            handleManualUpdateCheck={handleManualUpdateCheck}
+            setRealtimeLogs={setRealtimeLogs}
+          />
         </div>
       </main>
     </div>
   );
 };
+
+// ── TabContent Component (Memoized to prevent unnecessary re-renders)
+const TabContent = React.memo(({ 
+  activeTab, accounts, posts, scheduledPosts, taskStatus, realtimeLogs, 
+  settings, setSettings, appVersion, latestVersion, isCheckingUpdate, 
+  fetchAll, handleManualUpdateCheck, setRealtimeLogs 
+}) => {
+  switch (activeTab) {
+    case 'dashboard':
+      return (
+        <DashboardTab 
+          accounts={accounts} 
+          posts={posts} 
+          scheduledPosts={scheduledPosts} 
+          taskStatus={taskStatus} 
+          realtimeLogs={realtimeLogs} 
+          fetchAll={fetchAll} 
+        />
+      );
+    case 'settings':
+      return (
+        <SettingsTab 
+          settings={settings} 
+          setSettings={setSettings} 
+          fetchAll={fetchAll}
+          appVersion={appVersion}
+          latestVersion={latestVersion}
+          onManualUpdateCheck={handleManualUpdateCheck}
+          isCheckingUpdate={isCheckingUpdate}
+        />
+      );
+    case 'accounts':
+      return <AccountsTab accounts={accounts} fetchAll={fetchAll} />;
+    case 'campaigns':
+      return <CampaignsTab campaigns={campaigns} fetchAll={fetchAll} />;
+    case 'generate':
+      return <GenerateTab accounts={accounts} fetchAll={fetchAll} />;
+    case 'edit':
+      return <EditTab />;
+    case 'scheduled':
+      return <ScheduledTab scheduledPosts={scheduledPosts} accounts={accounts} fetchAll={fetchAll} />;
+    case 'logs':
+      return <LogsTab realtimeLogs={realtimeLogs} setRealtimeLogs={setRealtimeLogs} />;
+    default:
+      return null;
+  }
+});
 
 export default App;

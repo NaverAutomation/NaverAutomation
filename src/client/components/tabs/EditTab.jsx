@@ -56,7 +56,7 @@ const EditTab = React.memo(() => {
             >
               <option value="openai">🤖 GPT-4o (권장)</option>
               <option value="gemini">✨ 클라우드 AI API</option>
-              <option value="ollama">🦙 Ollama</option>
+              {import.meta.env.DEV && <option value="ollama">🦙 Ollama</option>}
             </select>
             <Btn variant="primary" onClick={handleEdit} disabled={loading} className="flex-1">
               {loading ? <span className="loading loading-spinner"></span> : '✨ AI 매직 교정 실행'}

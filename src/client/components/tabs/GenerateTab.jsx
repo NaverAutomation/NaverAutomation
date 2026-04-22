@@ -290,7 +290,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
               className="select select-lg select-bordered w-full bg-base-100 font-semibold"
             >
               <option value="gemini">✨ 클라우드 AI API</option>
-              <option value="ollama">🦙 Ollama (로컬무료)</option>
+              {import.meta.env.DEV && <option value="ollama">🦙 Ollama (로컬무료)</option>}
             </select>
           </div>
           <Btn variant="primary" className="btn-lg w-full md:w-auto" onClick={handleGenerate} disabled={loading}>

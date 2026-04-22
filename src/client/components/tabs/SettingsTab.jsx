@@ -75,29 +75,33 @@ const SettingsTab = React.memo(({
             <ul className="list-disc pl-4 space-y-1">
               <li>AI API 키는 서버에서 안전하게 관리되므로 별도로 입력할 필요가 없습니다.</li>
               <li>모든 블로그 원고 생성 및 자동 재작성(Rewrite)은 서버 AI 엔진을 통해 수행됩니다.</li>
-              <li>개인용 로컬 AI를 사용하려면 하단의 Ollama 설정을 이용하세요.</li>
+              {import.meta.env.DEV && <li>개인용 로컬 AI를 사용하려면 하단의 Ollama 설정을 이용하세요.</li>}
             </ul>
           </div>
         </div>
       </div>
 
-      <SectionTitle className="mt-10">🦙 Ollama 연동 (로컬 AI)</SectionTitle>
-      <div className="flex flex-col gap-2">
-        <Input
-          label="Ollama API 엔드포인트"
-          type="text"
-          placeholder="http://localhost:11434"
-          value={localSettings.ollama_endpoint || ''}
-          onChange={e => setLocalSettings(prev => ({ ...prev, ollama_endpoint: e.target.value }))}
-        />
-        <Input
-          label="Ollama 모델명"
-          type="text"
-          placeholder="llama3"
-          value={localSettings.ollama_model || ''}
-          onChange={e => setLocalSettings(prev => ({ ...prev, ollama_model: e.target.value }))}
-        />
-      </div>
+      {import.meta.env.DEV && (
+        <>
+          <SectionTitle className="mt-10">🦙 Ollama 연동 (로컬 AI)</SectionTitle>
+          <div className="flex flex-col gap-2">
+            <Input
+              label="Ollama API 엔드포인트"
+              type="text"
+              placeholder="http://localhost:11434"
+              value={localSettings.ollama_endpoint || ''}
+              onChange={e => setLocalSettings(prev => ({ ...prev, ollama_endpoint: e.target.value }))}
+            />
+            <Input
+              label="Ollama 모델명"
+              type="text"
+              placeholder="llama3"
+              value={localSettings.ollama_model || ''}
+              onChange={e => setLocalSettings(prev => ({ ...prev, ollama_model: e.target.value }))}
+            />
+          </div>
+        </>
+      )}
 
       <div className="mt-8 pt-6 border-t border-base-300 flex justify-end">
         <Btn variant="primary" onClick={handleSave} disabled={loading} className="w-full sm:w-auto px-8">
