@@ -1,12 +1,13 @@
 import db from '../db/database.js';
-import { generateContent } from './ai-service.js';
+import { generateRewriteWithGemini } from './ai-service.js';
 import { postToNaver } from './naver-service.js';
 import { decrypt } from '../utils/crypto.js';
 
 // 스케줄러 상태
 let schedulerInterval = null;
 let isRunning = false;
-let taskQueue = [];
+let activeWorkers = 0;
+const MAX_WORKERS = 3;
 let io = null; // Socket.io 인스턴스
 
 /**
@@ -19,17 +20,22 @@ export function setIO(socketIO) {
 /**
  * 실시간 로그 emit + DB 저장
  */
-function emitLog(level, message) {
-  const log = { level, message, created_at: new Date().toISOString() };
-  console.log(`[${level.toUpperCase()}] ${message}`);
+function emitLog(level, message, userId = null) {
+  const log = { 
+    level, 
+    message, 
+    user_id: userId,
+    created_at: new Date().toISOString() 
+  };
+  console.log(`[${level.toUpperCase()}]${userId ? ` [User:${userId.slice(0, 8)}]` : ''} ${message}`);
   
   if (io) {
     io.emit('log', log);
   }
 
   db.run(
-    'INSERT INTO logs (level, message) VALUES (?, ?)',
-    [level, message],
+    'INSERT INTO logs (user_id, level, message) VALUES (?, ?, ?)',
+    [userId, level, message],
     (err) => { if (err) console.error('Log save error:', err.message); }
   );
 }
@@ -41,124 +47,146 @@ function emitTaskStatus() {
   if (io) {
     io.emit('task-status', {
       isRunning,
-      queueLength: taskQueue.length,
+      activeWorkers,
     });
   }
 }
 
 /**
- * 라운드로빈으로 다음 활성 계정 선택
+ * 유저별 사용 가능한 계정 조회 (1일 3회 한도 체크 포함)
  */
-async function getNextActiveAccount() {
+async function getAvailableAccount(userId) {
+  const today = new Date().toISOString().split('T')[0];
+  
   return new Promise((resolve, reject) => {
-    db.all(
-      "SELECT * FROM accounts WHERE status = 'active' ORDER BY round_robin_order ASC, id ASC",
-      [],
-      (err, rows) => {
+    // 1. 오늘 날짜가 아니면 카운트 리셋
+    db.run(
+      "UPDATE accounts SET daily_post_count = 0, last_post_date = ? WHERE user_id = ? AND (last_post_date != ? OR last_post_date IS NULL)",
+      [today, userId, today],
+      (err) => {
         if (err) return reject(err);
-        if (!rows || rows.length === 0) return resolve(null);
-
-        const account = rows[0];
-        // round_robin_order 업데이트 (순환)
-        const maxOrder = rows.length - 1;
-        const nextOrder = account.round_robin_order >= maxOrder
-          ? 0
-          : account.round_robin_order + 1;
-
-        // 현재 계정을 뒤로 보내기
-        db.run(
-          'UPDATE accounts SET round_robin_order = ? WHERE id = ?',
-          [rows.length, account.id],
-          () => {}
+        
+        // 2. 한도가 남은 계정 중 가장 오랫동안 안 쓴 계정 선택
+        db.get(
+          "SELECT * FROM accounts WHERE user_id = ? AND status = 'active' AND daily_post_count < 3 ORDER BY round_robin_order ASC LIMIT 1",
+          [userId],
+          (err, row) => {
+            if (err) return reject(err);
+            resolve(row || null);
+          }
         );
-        // 나머지 계정 순서 당기기
-        db.run(
-          'UPDATE accounts SET round_robin_order = round_robin_order - 1 WHERE status = "active" AND id != ? AND round_robin_order > 0',
-          [account.id],
-          () => {}
-        );
-
-        resolve(account);
       }
     );
   });
 }
 
 /**
- * 예약된 포스트 확인 및 자동 발행
+ * 유저의 Gemini API 키 가져오기
  */
-export async function processScheduledPosts() {
+async function getUserGeminiKey(userId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      "SELECT value FROM settings WHERE user_id = ? AND key = 'gemini_api_key'",
+      [userId],
+      (err, row) => {
+        if (err) return reject(err);
+        resolve(row ? decrypt(row.value) : null);
+      }
+    );
+  });
+}
+
+/**
+ * 단일 워커 작업 프로세스
+ */
+async function performTask(campaign) {
+  activeWorkers++;
+  emitTaskStatus();
+
+  const userId = campaign.user_id;
+  try {
+    // 1. 계정 선택
+    const account = await getAvailableAccount(userId);
+    if (!account) {
+      emitLog('warn', `활성화된 계정 중 오늘 포스팅 한도(3회)가 남은 계정이 없습니다.`, userId);
+      return;
+    }
+
+    // 2. API 키 로드
+    const apiKey = await getUserGeminiKey(userId);
+    if (!apiKey) {
+      emitLog('error', `Gemini API 키가 설정되지 않아 작업을 수행할 수 없습니다.`, userId);
+      return;
+    }
+
+    emitLog('info', `계정 ${account.naver_id}로 포스팅을 시작합니다. (오늘 ${account.daily_post_count + 1}회째)`, userId);
+
+    // 3. AI 원고 생성 (Rewrite)
+    const aiResult = await generateRewriteWithGemini(apiKey, campaign.title, campaign.content);
+    
+    // 4. 네이버 블로그 포스팅
+    const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
+    const postResult = await postToNaver(decryptedAccount, {
+      title: aiResult.title,
+      content: aiResult.content,
+      image_url: campaign.image_url,
+    }, { headless: true });
+
+    if (postResult.success) {
+      // 5. 성공 시 계정 카운트 및 순서 업데이트
+      db.run(
+        "UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?",
+        [new Date().toISOString().split('T')[0], account.id]
+      );
+      
+      // 발행 기록 저장
+      db.run(
+        "INSERT INTO posts (user_id, account_id, title, content, image_url, status) VALUES (?, ?, ?, ?, ?, ?)",
+        [userId, account.id, aiResult.title, aiResult.content, campaign.image_url, 'published']
+      );
+
+      emitLog('success', `성공적으로 포스팅되었습니다: ${aiResult.title}`, userId);
+    } else {
+      emitLog('error', `포스팅 실패: ${postResult.message}`, userId);
+      // 실패 기록 저장
+      db.run(
+        "INSERT INTO posts (user_id, account_id, title, content, image_url, status) VALUES (?, ?, ?, ?, ?, ?)",
+        [userId, account.id, aiResult.title, aiResult.content, campaign.image_url, 'failed']
+      );
+    }
+
+  } catch (error) {
+    emitLog('error', `작업 수행 중 오류 발생: ${error.message}`, userId);
+  } finally {
+    activeWorkers--;
+    emitTaskStatus();
+  }
+}
+
+/**
+ * 전체 스케줄링 메인 루프
+ */
+export async function processAutomation() {
   if (!isRunning) return;
+  if (activeWorkers >= MAX_WORKERS) return;
 
-  const now = new Date().toISOString();
-
+  // 활성화된 캠페인 가져오기 (랜덤하게 섞어서 유저간 공평성 유지)
   db.all(
-    "SELECT * FROM posts WHERE status = 'scheduled' AND scheduled_at <= ? ORDER BY scheduled_at ASC",
-    [now],
-    async (err, posts) => {
+    "SELECT * FROM campaigns WHERE status = 'active' ORDER BY RANDOM()",
+    [],
+    async (err, campaigns) => {
       if (err) {
-        emitLog('error', `Failed to load scheduled posts: ${err.message}`);
+        emitLog('error', `캠페인 로드 실패: ${err.message}`);
         return;
       }
-      if (!posts || posts.length === 0) return;
 
-      emitLog('info', `Starting publication for ${posts.length} scheduled post(s)...`);
+      for (const campaign of campaigns) {
+        if (activeWorkers >= MAX_WORKERS) break;
+        if (!isRunning) break;
 
-      for (const post of posts) {
-        if (!isRunning) {
-          emitLog('info', 'Scheduler stopped. Halting scheduled publication.');
-          break;
-        }
-
-        // 상태를 'processing'으로 변경
-        db.run("UPDATE posts SET status = 'processing' WHERE id = ?", [post.id]);
-
-        try {
-          let account;
-          if (post.account_id) {
-            // 지정된 계정 사용
-            account = await new Promise((resolve, reject) => {
-              db.get('SELECT * FROM accounts WHERE id = ?', [post.account_id], (err, row) => {
-                if (err) reject(err); else resolve(row);
-              });
-            });
-          } else {
-            // 라운드로빈으로 계정 선택
-            account = await getNextActiveAccount();
-          }
-
-          if (!account) {
-            emitLog('error', `Post #${post.id}: No available account.`);
-            db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
-            continue;
-          }
-
-          const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
-          emitLog('info', `Post #${post.id} "${post.title}" -> Attempting publish with account ${decryptedAccount.naver_id}...`);
-
-          const result = await postToNaver(decryptedAccount, {
-            title: post.title,
-            content: post.content,
-            image_url: post.image_url,
-          }, {
-            headless: post.headless === null || post.headless === undefined ? undefined : Boolean(post.headless),
-          });
-
-          const newStatus = result.success ? 'published' : 'failed';
-          db.run("UPDATE posts SET status = ? WHERE id = ?", [newStatus, post.id]);
-
-          if (result.success) {
-            emitLog('success', `Post #${post.id} "${post.title}" published successfully.`);
-          } else {
-            emitLog('error', `Post #${post.id} publish failed: ${result.message}`);
-          }
-        } catch (error) {
-          emitLog('error', `Post #${post.id} processing error: ${error.message}`);
-          db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
-        }
+        // 비동기로 워커 실행 (기다리지 않음)
+        performTask(campaign);
       }
-
-      emitTaskStatus();
     }
   );
 }
@@ -168,17 +196,17 @@ export async function processScheduledPosts() {
  */
 export function startScheduler() {
   if (isRunning) {
-    emitLog('warn', 'Scheduler is already running.');
+    emitLog('warn', '스케줄러가 이미 실행 중입니다.');
     return false;
   }
 
   isRunning = true;
-  emitLog('success', 'Automation started. Scheduled posts are checked every minute.');
+  emitLog('success', '24시간 무한 루프 자동화가 시작되었습니다.');
   emitTaskStatus();
 
-  // 즉시 한 번 실행 후 1분마다 반복
-  processScheduledPosts();
-  schedulerInterval = setInterval(processScheduledPosts, 60 * 1000);
+  // 즉시 실행 및 5분 간격 체크 (네이버 제재 방지를 위해 간격 유지)
+  processAutomation();
+  schedulerInterval = setInterval(processAutomation, 5 * 60 * 1000);
   return true;
 }
 
@@ -187,7 +215,7 @@ export function startScheduler() {
  */
 export function stopScheduler() {
   if (!isRunning) {
-    emitLog('warn', 'Scheduler is already stopped.');
+    emitLog('warn', '스케줄러가 이미 정지되어 있습니다.');
     return false;
   }
 
@@ -196,7 +224,7 @@ export function stopScheduler() {
     clearInterval(schedulerInterval);
     schedulerInterval = null;
   }
-  emitLog('info', 'Automation stopped.');
+  emitLog('info', '자동화가 정지되었습니다.');
   emitTaskStatus();
   return true;
 }
@@ -207,6 +235,13 @@ export function stopScheduler() {
 export function getSchedulerStatus() {
   return {
     isRunning,
-    queueLength: taskQueue.length,
+    activeWorkers,
+    maxWorkers: MAX_WORKERS
   };
+}
+
+// 구버전 호환용 (사용되지 않을 수 있음)
+export async function processScheduledPosts() {
+  // 새 루프에서 통합 처리되므로 구현 생략 가능하거나 새 루프 호출
+  processAutomation();
 }
