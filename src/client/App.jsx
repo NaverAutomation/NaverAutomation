@@ -16,6 +16,8 @@ import LogsTab from './components/tabs/LogsTab';
 import Login from './components/Login.jsx';
 import { supabase } from './utils/supabase.js';
 
+const WEB_APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'unknown';
+
 const TABS = [
   { id: 'dashboard', label: '🏠 대시보드' },
   { id: 'accounts',  label: '👤 계정 관리' },
@@ -97,7 +99,12 @@ const App = () => {
   useEffect(() => {
     const api = window.electronAPI;
     if (!api) {
-      setAppVersion('web');
+      setAppVersion(WEB_APP_VERSION);
+      setUpdaterState({
+        status: 'browser-mode',
+        message: `브라우저 모드입니다. 현재 빌드 버전은 ${WEB_APP_VERSION} 입니다.`,
+        timestamp: new Date().toISOString(),
+      });
       return;
     }
 

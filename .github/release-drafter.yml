@@ -1,6 +1,6 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
-draft: false
+draft: true
 prerelease: false
 exclude-labels:
   - 'skip-changelog'
@@ -32,7 +32,7 @@ template: |
 
   $CHANGES
 
-  **전체 변경사항**: https://github.com/$OWNER/$REPO/compare/$PREVIOUS_TAG...$RESOLVED_TAG
+  **전체 변경사항**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
 no-changes-template: '변경사항이 없어요'
 version-resolver:
   major:

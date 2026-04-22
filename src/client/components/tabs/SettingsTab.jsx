@@ -11,6 +11,7 @@ const STATUS_LABELS = {
   'update-not-available': '최신 버전',
   error: '오류',
   'dev-mode': '개발 모드',
+  'browser-mode': '브라우저 모드',
 };
 
 const SettingsTab = React.memo(({
