@@ -80,21 +80,32 @@ jobs:
       pull-requests: read
 
     steps:
-      - name: Resolve release metadata
-        id: release_meta
-        run: |
-          echo "tag_name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          echo "release_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Publish drafted release notes
-        uses: release-drafter/release-drafter@v7.2.0
-        with:
-          config-name: release-drafter.yml
-          tag: ${{ steps.release_meta.outputs.tag_name }}
-          name: ${{ steps.release_meta.outputs.tag_name }}
-          version: ${{ steps.release_meta.outputs.release_version }}
-          publish: true
-          latest: true
+      - name: Publish release notes and clean up drafts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          # 가장 최근에 업데이트된 draft 릴리즈 노트 가져오기
+          DRAFT=$(gh api "repos/${GH_REPO}/releases" \
+            --jq '[.[] | select(.draft == true)] | sort_by(.updated_at) | reverse | .[0]')
+
+          DRAFT_ID=$(echo "$DRAFT" | jq -r '.id // empty')
+
+          if [ -z "$DRAFT_ID" ]; then
+            echo "Draft release not found, skipping notes update."
+          else
+            echo "$DRAFT" | jq -r '.body' > /tmp/release_notes.md
+            echo "Updating release $TAG with draft notes..."
+            gh release edit "$TAG" --notes-file /tmp/release_notes.md --latest
+          fi
+
+          # 남아있는 stale draft 릴리즈 전부 삭제
+          gh api "repos/${GH_REPO}/releases" \
+            --jq '.[] | select(.draft == true) | .id' | \
+            while IFS= read -r id; do
+              echo "Deleting stale draft release id: $id"
+              gh api -X DELETE "repos/${GH_REPO}/releases/${id}" || true
+            done
 

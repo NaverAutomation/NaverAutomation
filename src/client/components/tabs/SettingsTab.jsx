@@ -61,7 +61,7 @@ const SettingsTab = React.memo(({
           <select
             className="select select-bordered w-full bg-base-100"
             value={localSettings.gemini_model || 'auto'}
-            onChange={e => setLocalSettings({ ...localSettings, gemini_model: e.target.value })}
+            onChange={e => setLocalSettings(prev => ({ ...prev, gemini_model: e.target.value }))}
           >
             <option value="auto">✨ 최적화 모드 (권장)</option>
           </select>
@@ -88,14 +88,14 @@ const SettingsTab = React.memo(({
           type="text"
           placeholder="http://localhost:11434"
           value={localSettings.ollama_endpoint || ''}
-          onChange={e => setLocalSettings({ ...localSettings, ollama_endpoint: e.target.value })}
+          onChange={e => setLocalSettings(prev => ({ ...prev, ollama_endpoint: e.target.value }))}
         />
         <Input
           label="Ollama 모델명"
           type="text"
           placeholder="llama3"
           value={localSettings.ollama_model || ''}
-          onChange={e => setLocalSettings({ ...localSettings, ollama_model: e.target.value })}
+          onChange={e => setLocalSettings(prev => ({ ...prev, ollama_model: e.target.value }))}
         />
       </div>
 

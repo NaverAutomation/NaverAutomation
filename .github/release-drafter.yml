@@ -33,7 +33,7 @@ categories:
       - '🚀 deploy'
 
 # Rendered note body
-change-template: '- $TITLE (#$NUMBER) @$AUTHOR'
+change-template: '- $TITLE (#$NUMBER)'
 template: |
   ## 📝 이번 버전의 변경사항
 

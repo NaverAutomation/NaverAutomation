@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { apiFetch } from '../../utils/api';
 
-const CampaignsTab = ({ campaigns, fetchAll }) => {
+const CampaignsTab = React.memo(({ campaigns, fetchAll }) => {
   const [newCampaign, setNewCampaign] = useState({ title: '', content: '', image_url: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -68,7 +68,7 @@ const CampaignsTab = ({ campaigns, fetchAll }) => {
                 className="input input-bordered input-lg w-full focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-inner"
                 placeholder="예: 최신 트릭컬 리바이브 티어표 및 공략 가이드"
                 value={newCampaign.title}
-                onChange={(e) => setNewCampaign({ ...newCampaign, title: e.target.value })}
+                onChange={(e) => setNewCampaign(prev => ({ ...prev, title: e.target.value }))}
               />
             </div>
 
@@ -78,7 +78,7 @@ const CampaignsTab = ({ campaigns, fetchAll }) => {
                 className="textarea textarea-bordered h-48 text-base leading-relaxed focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-inner"
                 placeholder="AI가 이 내용을 기반으로 매번 새로운 글을 생성합니다..."
                 value={newCampaign.content}
-                onChange={(e) => setNewCampaign({ ...newCampaign, content: e.target.value })}
+                onChange={(e) => setNewCampaign(prev => ({ ...prev, content: e.target.value }))}
               />
             </div>
 
@@ -89,7 +89,7 @@ const CampaignsTab = ({ campaigns, fetchAll }) => {
                 className="input input-bordered w-full focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-inner"
                 placeholder="https://..."
                 value={newCampaign.image_url}
-                onChange={(e) => setNewCampaign({ ...newCampaign, image_url: e.target.value })}
+                onChange={(e) => setNewCampaign(prev => ({ ...prev, image_url: e.target.value }))}
               />
             </div>
 
@@ -161,6 +161,6 @@ const CampaignsTab = ({ campaigns, fetchAll }) => {
       </section>
     </div>
   );
-};
+});
 
 export default CampaignsTab;

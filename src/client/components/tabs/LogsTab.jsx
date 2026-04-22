@@ -11,7 +11,7 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
   }, []);
 
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    logEndRef.current?.scrollIntoView({ behavior: 'instant' });
   }, [realtimeLogs]);
 
   const handleClearLogs = async () => {

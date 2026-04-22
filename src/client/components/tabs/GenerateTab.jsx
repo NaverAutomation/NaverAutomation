@@ -271,7 +271,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
                  placeholder="예: 2024 성수동 핫플 카페 5곳 정리"
                  value={keyword}
                  onChange={e => setKeyword(e.target.value)}
-                 onKeyDown={e => e.key === 'Enter' && handleGenerate()}
+                 onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && handleGenerate()}
                />
              </div>
           </div>
