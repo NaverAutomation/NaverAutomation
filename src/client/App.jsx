@@ -119,7 +119,7 @@ const App = () => {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-black text-primary drop-shadow-sm">Naver Blog Auto</h1>
-              <span className="badge badge-sm badge-neutral opacity-50 font-mono">v0.2.1</span>
+              <span className="badge badge-sm badge-neutral opacity-50 font-mono">v0.2.2</span>
             </div>
             <p className="text-xs sm:text-sm text-base-content/60 font-semibold">AI 기반 네이버 블로그 자동화</p>
           </div>
