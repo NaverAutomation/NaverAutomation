@@ -92,13 +92,15 @@ jobs:
             --jq '[.[] | select(.draft == true)] | sort_by(.updated_at) | reverse | .[0]')
 
           DRAFT_ID=$(echo "$DRAFT" | jq -r '.id // empty')
+          DRAFT_BODY=$(echo "$DRAFT" | jq -r '.body // empty')
 
-          if [ -z "$DRAFT_ID" ]; then
-            echo "Draft release not found, skipping notes update."
-          else
-            echo "$DRAFT" | jq -r '.body' > /tmp/release_notes.md
+          if [ -n "$DRAFT_ID" ] && [ -n "$DRAFT_BODY" ] && [ "$DRAFT_BODY" != "null" ]; then
             echo "Updating release $TAG with draft notes..."
+            echo "$DRAFT_BODY" > /tmp/release_notes.md
             gh release edit "$TAG" --notes-file /tmp/release_notes.md --latest
+          else
+            echo "No valid draft notes found, using auto-generated notes..."
+            gh release edit "$TAG" --generate-notes --latest
           fi
 
           # 남아있는 stale draft 릴리즈 전부 삭제
