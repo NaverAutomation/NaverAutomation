@@ -6,6 +6,7 @@ import { useSocket } from './hooks/useSocket';
 import DashboardTab from './components/tabs/DashboardTab';
 import SettingsTab from './components/tabs/SettingsTab';
 import AccountsTab from './components/tabs/AccountsTab';
+import CampaignsTab from './components/tabs/CampaignsTab';
 import GenerateTab from './components/tabs/GenerateTab';
 import EditTab from './components/tabs/EditTab';
 import ScheduledTab from './components/tabs/ScheduledTab';
@@ -18,6 +19,7 @@ import { supabase } from './utils/supabase.js';
 const TABS = [
   { id: 'dashboard', label: '🏠 대시보드' },
   { id: 'accounts',  label: '👤 계정 관리' },
+  { id: 'campaigns', label: '🎯 캠페인 (24/7)' },
   { id: 'generate',  label: '✍️ 글 생성' },
   { id: 'edit',      label: '📝 글 수정' },
   { id: 'scheduled', label: '📅 예약 목록' },
@@ -28,9 +30,10 @@ const TABS = [
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [taskStatus, setTaskStatus] = useState({ isRunning: false, queueLength: 0 });
+  const [taskStatus, setTaskStatus] = useState({ isRunning: false, activeWorkers: 0, maxWorkers: 3 });
   const [realtimeLogs, setRealtimeLogs] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
   const [posts, setPosts] = useState([]);
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [settings, setSettings] = useState({ openai_api_key: '', gemini_api_key: '' });
@@ -54,14 +57,16 @@ const App = () => {
   const fetchAll = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
-      const [acc, ps, sched, sets, taskSt] = await Promise.all([
+      const [acc, camp, ps, sched, sets, taskSt] = await Promise.all([
         apiFetch('/api/accounts'),
+        apiFetch('/api/campaigns'),
         apiFetch('/api/posts'),
         apiFetch('/api/posts/scheduled'),
         apiFetch('/api/settings'),
         apiFetch('/api/task/status'),
       ]);
       setAccounts(acc);
+      setCampaigns(camp);
       setPosts(ps);
       setScheduledPosts(sched);
       setSettings(prev => ({ ...prev, ...sets }));
@@ -119,7 +124,9 @@ const App = () => {
         <div className="flex-none gap-3 sm:gap-6">
           <div className="hidden sm:flex items-center gap-2 badge badge-outline badge-lg px-4 py-4 bg-base-200 border-base-100 shadow-inner">
             <span className={`w-3 h-3 rounded-full ${taskStatus.isRunning ? 'bg-success shadow-[0_0_8px_#22c55e] animate-pulse' : 'bg-error'}`} />
-            <span className="font-bold text-sm tracking-wide">{taskStatus.isRunning ? '스케줄러 실행 중' : '스케줄러 정지'}</span>
+            <span className="font-bold text-sm tracking-wide">
+              {taskStatus.isRunning ? `스케줄러 실행 중 (${taskStatus.activeWorkers}/${taskStatus.maxWorkers})` : '스케줄러 정지'}
+            </span>
           </div>
           <button
             onClick={handleTaskToggle}
@@ -187,6 +194,12 @@ const App = () => {
           {activeTab === 'accounts' ? (
             <AccountsTab 
               accounts={accounts} 
+              fetchAll={fetchAll} 
+            />
+          ) : null}
+          {activeTab === 'campaigns' ? (
+            <CampaignsTab 
+              campaigns={campaigns} 
               fetchAll={fetchAll} 
             />
           ) : null}

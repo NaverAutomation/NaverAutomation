@@ -163,7 +163,7 @@ const ManualComposeCard = React.memo(({ accounts, fetchAll }) => {
 
 const GenerateTab = React.memo(({ accounts, fetchAll }) => {
   const [keyword, setKeyword] = useState('');
-  const [engine, setEngine] = useState('openai');
+  const [engine, setEngine] = useState('gemini');
   const [generated, setGenerated] = useState(null);
   const [loading, setLoading] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -260,7 +260,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
   return (
     <div className="flex flex-col gap-6">
       <Card>
-        <SectionTitle>✍️ AI 블로그 원고 & 이미지 생성기</SectionTitle>
+        <SectionTitle>✍️ AI 블로그 원고 생성기</SectionTitle>
         <div className="flex flex-col md:flex-row gap-4 items-end">
           <div className="flex-1 w-full relative">
              <label className="label-text font-bold block mb-2 px-1 text-base-content/80">어떤 주제로 포스팅할까요?</label>
@@ -282,8 +282,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
               onChange={e => setEngine(e.target.value)}
               className="select select-lg select-bordered w-full bg-base-100 font-semibold"
             >
-              <option value="openai">🤖 GPT-4o + DALL-E</option>
-              <option value="gemini">✨ Gemini Pro</option>
+              <option value="gemini">✨ Google Gemini</option>
               <option value="ollama">🦙 Ollama (로컬무료)</option>
             </select>
           </div>
@@ -302,9 +301,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
             {generated.modelUsed && (
               <div className="badge badge-outline badge-sm py-3 px-3 gap-2 text-base-content/60 border-base-300 font-medium">
                 <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-                {generated.modelUsed.includes('flash') ? '⚡ Gemini Flash' : 
-                 generated.modelUsed.includes('pro') ? '🧠 Gemini Pro' : 
-                 generated.modelUsed === 'gpt-4o' ? '🤖 GPT-4o' : generated.modelUsed} 사용됨
+                {engine === 'gemini' ? 'AI 엔진 (Gemini)' : '로컬 엔진 (Ollama)'} 사용됨
               </div>
             )}
           </div>
@@ -322,16 +319,6 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
               value={generated.content}
               onChange={e => setGenerated(prev => ({ ...prev, content: e.target.value }))}
             />
-            
-            {generated.imageUrl && (
-              <div className="mt-8 bg-base-200 p-4 border border-base-300 rounded-xl shadow-sm">
-                <label className="label-text font-bold mb-4 text-base-content flex items-center justify-between">
-                  <span>🎨 AI 생성 커버 이미지 (DALL-E 3)</span>
-                  <div className="badge badge-success">생성 완료</div>
-                </label>
-                <img src={generated.imageUrl} alt="AI Generated" className="w-full max-h-[400px] object-cover rounded-lg shadow" />
-              </div>
-            )}
           </div>
 
           <div className="mt-8 p-6 bg-base-300/40 border border-base-300 rounded-2xl flex flex-col lg:flex-row gap-6 lg:items-end">

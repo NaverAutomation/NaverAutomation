@@ -47,17 +47,23 @@ const DashboardTab = React.memo(({ accounts, posts, scheduledPosts, taskStatus, 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
         {/* 스케줄러 상태 */}
         <Card className="h-full flex flex-col">
-          <SectionTitle>⚡ 스케줄러 상태</SectionTitle>
+          <SectionTitle>⚡ 24/7 자동화 엔진 상태</SectionTitle>
           <div className="flex-1 flex flex-col justify-center gap-4 py-4">
             <div className="flex items-center gap-3">
               <span className={`w-4 h-4 rounded-full ${taskStatus.isRunning ? 'bg-success shadow-[0_0_12px_#22c55e] animate-pulse' : 'bg-error'}`} />
               <span className={`text-lg font-extrabold ${taskStatus.isRunning ? 'text-success' : 'text-error'}`}>
-                {taskStatus.isRunning ? '실행 중 - 1분마다 예약 발행 확인' : '정지됨'}
+                {taskStatus.isRunning ? '무한 루프 작동 중' : '정지됨'}
               </span>
             </div>
-            <div className="text-sm font-medium text-base-content/70 flex items-center bg-base-300/50 p-4 rounded-xl border border-base-300">
-              <span className="flex-1">대기 중인 예약 포스트:</span>
-              <strong className="text-warning text-xl">{taskStatus.queueLength || scheduledPosts.length}개</strong>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-sm font-medium text-base-content/70 flex flex-col bg-base-300/50 p-4 rounded-xl border border-base-300">
+                <span>활성 워커 (브라우저):</span>
+                <strong className="text-primary text-2xl">{taskStatus.activeWorkers || 0} / {taskStatus.maxWorkers || 3}</strong>
+              </div>
+              <div className="text-sm font-medium text-base-content/70 flex flex-col bg-base-300/50 p-4 rounded-xl border border-base-300">
+                <span>대기 중인 예약글:</span>
+                <strong className="text-warning text-2xl">{scheduledPosts.length}개</strong>
+              </div>
             </div>
           </div>
         </Card>
