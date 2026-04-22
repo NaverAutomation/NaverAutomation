@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
@@ -48,31 +49,48 @@ io.on('connection', (socket) => {
 });
 
 export const startServer = (initialPort = CONFIG.PORT) => {
-  return new Promise((resolve, reject) => {
-    let currentPort = initialPort;
-    const maxRetries = 10;
-    let tryCount = 0;
+  const maxRetries = 10;
 
-    const tryListen = (port) => {
-      httpServer.listen(port, () => {
-        console.log(`✅ Server running on http://localhost:${port}`);
-        console.log(`📡 Socket.io enabled`);
-        resolve({ server: httpServer, port });
-      });
+  const findAvailablePort = (port, tryCount = 0) => {
+    return new Promise((resolve, reject) => {
+      const probe = net.createServer();
 
-      httpServer.once('error', (err) => {
+      probe.once('error', (err) => {
+        probe.close();
         if (err.code === 'EADDRINUSE' && tryCount < maxRetries) {
           console.warn(`[Server] Port ${port} is already in use. Trying next...`);
-          tryCount++;
-          tryListen(port + 1);
+          resolve(findAvailablePort(port + 1, tryCount + 1));
         } else {
-          console.error(`[Server] Port ${port} listen error:`, err);
           reject(err);
         }
       });
-    };
 
-    tryListen(currentPort);
+      probe.once('listening', () => {
+        probe.close(() => resolve(port));
+      });
+
+      probe.listen(port);
+    });
+  };
+
+  return new Promise((resolve, reject) => {
+    findAvailablePort(initialPort)
+      .then((availablePort) => {
+        httpServer.listen(availablePort, () => {
+          console.log(`✅ Server running on http://localhost:${availablePort}`);
+          console.log(`📡 Socket.io enabled`);
+          resolve({ server: httpServer, port: availablePort });
+        });
+
+        httpServer.once('error', (err) => {
+          console.error(`[Server] Port ${availablePort} listen error:`, err);
+          reject(err);
+        });
+      })
+      .catch((err) => {
+        console.error(`[Server] Failed to find available port from ${initialPort}:`, err);
+        reject(err);
+      });
   });
 };
 
