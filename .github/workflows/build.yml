@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Release Drafter
         uses: release-drafter/release-drafter@v7.2.0
+        with:
+          config-name: release-drafter.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -52,6 +54,7 @@ jobs:
       - name: Update Release Notes
         uses: release-drafter/release-drafter@v7.2.0
         with:
+          config-name: release-drafter.yml
           publish: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
