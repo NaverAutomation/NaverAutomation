@@ -51,7 +51,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update Release Notes
+  publish_release_notes:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - name: Publish Release Notes
         uses: release-drafter/release-drafter@v7.2.0
         with:
           config-name: release-drafter.yml
