@@ -1,5 +1,9 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
+draft: false
+prerelease: false
+exclude-labels:
+  - 'skip-changelog'
 categories:
   - title: '🎁 새로운 기능이 추가되었어요'
     labels:
@@ -14,11 +18,21 @@ categories:
       - '🪄 setting'
       - '🎫 test'
       - '🚀 deploy'
-change-template: '- $TITLE #$NUMBER @$AUTHOR '
+change-template: '- $TITLE (#$NUMBER) @$AUTHOR'
+include-labels:
+  - '🎁 feature'
+  - '🔨 fix'
+  - '📋 docs'
+  - '🧼 refactor'
+  - '🪄 setting'
+  - '🎫 test'
+  - '🚀 deploy'
 template: |
-  ## 이번 버전의 변경사항은 아래와 같아요
-  ---
+  ## 📝 이번 버전의 변경사항
+
   $CHANGES
+
+  **전체 변경사항**: https://github.com/$OWNER/$REPO/compare/$PREVIOUS_TAG...$RESOLVED_TAG
 no-changes-template: '변경사항이 없어요'
 version-resolver:
   major:
