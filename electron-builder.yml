@@ -22,4 +22,4 @@ publish:
   provider: github
   owner: NaverAutomation
   repo: NaverAutomation
-  releaseType: draft
+  releaseType: release
