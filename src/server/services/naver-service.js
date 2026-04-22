@@ -80,12 +80,18 @@ export async function postToNaver(account, post, options = {}) {
     // 3. 제목 입력 (인덱스 기반 셀렉터 적용)
     console.log(`Typing title: ${post.title.substring(0, 20)}...`);
     try {
+      // 에디터 활성화를 위해 본문 영역 전체를 한 번 클릭
+      await frame.click('.se-editor-container', { force: true });
+      await page.waitForTimeout(500);
+
       // 첫 번째 .se-component-content가 제목
       const titleArea = frame.locator('.se-component-content').nth(0);
       await titleArea.waitFor({ state: 'visible', timeout: 10000 });
-      await titleArea.click({ force: true });
       
+      // 제목 영역을 확실하게 세 번 클릭하여 전체 선택 상태 유도
+      await titleArea.click({ clickCount: 3, force: true });
       await page.waitForTimeout(500);
+      
       await page.keyboard.press('Control+A');
       await page.keyboard.press('Backspace');
       await page.keyboard.type(post.title, { delay: 50 });
@@ -103,9 +109,13 @@ export async function postToNaver(account, post, options = {}) {
       const tempPath = path.join(os.tmpdir(), `naver_blog_image_${Date.now()}.png`);
       try {
         await downloadImage(post.image_url, tempPath);
-        const fileInput = await frame.waitForSelector('.se-file-input', { timeout: 5000 });
+        // 파일 업로드 버튼 대기
+        const fileInput = await frame.waitForSelector('.se-file-input', { timeout: 10000 });
         await fileInput.setInputFiles(tempPath);
-        await page.waitForTimeout(4000); // 업로드 대기 시간 증설
+        
+        // 업로드 중 로딩 바가 사라질 때까지 대기 (네이버 특유의 업로드 시간 고려)
+        await page.waitForTimeout(5000); 
+        console.log('Image upload request sent.');
       } catch (err) {
         console.error('Image upload failed:', err);
       } finally {
@@ -113,39 +123,37 @@ export async function postToNaver(account, post, options = {}) {
       }
     }
 
-    // Markdown 기호를 완벽하게 제거하여 네이버 블로그 에디터의 서식 오작동 방지 (취소선, 볼드 등)
-    // 특히 ~ 기호가 네이버 에디터에서 취소선으로 강력하게 동작하므로 완전히 제거합니다.
-    const cleanTitle = post.title.replace(/(\*\*|\*|__|_|~~|~|#|`|>)/g, '');
+    // Markdown 기호 제거
     const cleanContent = post.content.replace(/(\*\*|\*|__|_|~~|~|#|`|>)/g, '');
 
     // 본문 입력 (인덱스 기반 셀렉터 적용)
-    console.log('Typing content without auto-formatting...');
+    console.log('Typing content...');
     try {
-      // 두 번째 .se-component-content가 본문
-      const contentArea = frame.locator('.se-component-content').nth(1);
+      // 두 번째 .se-component-content가 본문 (이미지가 추가되면 인덱스가 밀릴 수 있으므로 유연하게 대처)
+      // 보통 제목이 0번, 본문이 1번 혹은 이미지 뒤의 텍스트가 본문
+      const contentCount = await frame.locator('.se-component-content').count();
+      const contentArea = frame.locator('.se-component-content').nth(contentCount - 1);
       
       await contentArea.waitFor({ state: 'visible', timeout: 5000 });
-      await contentArea.click({ force: true });
-      
+      await contentArea.click({ clickCount: 1, force: true });
       await page.waitForTimeout(1000);
       
       await page.keyboard.press('Control+A');
       await page.keyboard.press('Backspace');
       
       // 혹시라도 에디터 상단 툴바에 취소선, 볼드 등이 켜져있다면 강제로 꺼서 서식 초기화
-      console.log('Disabling any active toolbar formatting buttons...');
       await frame.evaluate(() => {
         const activeToggles = document.querySelectorAll('button.se-is-selected[data-type="toggle"]');
         activeToggles.forEach(btn => btn.click());
       });
-      // 다시 type으로 롤백합니다 (마크다운 스트리퍼 및 툴바 해제 로직으로 취소선 방어 완료)
-      await page.keyboard.type(cleanContent, { delay: 15 });
+
+      await page.keyboard.type(cleanContent, { delay: 10 });
       console.log('Content input completed.');
     } catch (e) {
       console.warn('Content input failed, trying fallback (Tab)...', e.message);
       await page.keyboard.press('Tab');
       await page.waitForTimeout(500);
-      await page.keyboard.type(cleanContent, { delay: 15 });
+      await page.keyboard.type(cleanContent, { delay: 10 });
     }
 
     // 본문 입력 후 에디터 내부에 잘못 적용된 취소선(strike, s, line-through) 강제 제거

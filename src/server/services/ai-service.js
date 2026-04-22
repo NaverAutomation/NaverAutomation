@@ -1,41 +1,9 @@
-import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-
-/**
- * OpenAI GPT-4o를 이용한 텍스트 생성
- */
-async function generateWithOpenAI(apiKey, keyword) {
-  const openai = new OpenAI({ apiKey });
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { 
-          role: 'system', 
-          content: '당신은 블로그 포스팅 전문가입니다. 반드시 아래 형식을 지켜주세요.\n[TITLE]제목[/TITLE]\n[CONTENT]본문[/CONTENT]' 
-        },
-        { role: 'user', content: `${keyword} 주제로 블로그 포스팅 원고를 작성해줘.` },
-      ],
-      max_tokens: 2000,
-    });
-
-    const fullText = response.choices[0].message.content;
-    const parsed = parseAIResponse(fullText);
-    return { ...parsed, modelUsed: 'gpt-4o' };
-  } catch (error) {
-    console.error('OpenAI Content Generation Error:', error);
-    throw new Error(`Failed to generate with OpenAI: ${error.message}`);
-  }
-}
 
 /**
  * Google Gemini 모델 자동 선택 로직
  */
 function selectBestGeminiModel(content) {
-  // 사용자의 계정에서 확인된 가장 쿼터가 넉넉한 모델을 사용합니다.
-  if (content.length > 2000) {
-    return 'gemini-2.5-flash';
-  }
   return 'gemini-2.5-flash-lite';
 }
 
@@ -45,16 +13,12 @@ function selectBestGeminiModel(content) {
 async function generateWithGemini(apiKey, keyword, modelPreference = 'auto') {
   const genAI = new GoogleGenerativeAI(apiKey);
   
-  // 모델 결정
-  let modelName = modelPreference;
-  if (!modelName || modelName === 'auto') {
-    modelName = selectBestGeminiModel(keyword);
-  }
+  // 모델 결정 (유저 요청에 따라 2.5 Flash Lite 우선)
+  let modelName = modelPreference === 'auto' ? 'gemini-2.5-flash-lite' : modelPreference;
   
-  // 사용 중인 가용 모델 리스트 기반 보정 (이미지 리스트 기반)
-  const availableModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro', 'gemini-3.1-pro', 'gemini-2-flash', 'gemini-2-flash-lite'];
+  const availableModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
   if (!availableModels.includes(modelName)) {
-    modelName = 'gemini-2.5-flash-lite'; // 리스트에 없는 모델은 가장 안전한 무료 모델로 전환
+    modelName = 'gemini-2.5-flash-lite';
   }
 
   console.log(`[Gemini] Starting generation with model: ${modelName}`);
@@ -75,33 +39,45 @@ async function generateWithGemini(apiKey, keyword, modelPreference = 'auto') {
     const parsed = parseAIResponse(fullText);
     return { ...parsed, modelUsed: modelName };
   } catch (error) {
-    // 429 에러(Quota/Spending Cap Exceeded) 발생 시 무조건 가용 리스트 중 가장 안전한 Flash-Lite로 자동 Fallback
-    if (!modelName.includes('lite') && (error.message.includes('429') || error.message.includes('quota') || error.message.includes('spending'))) {
-      console.warn(`[Gemini] ${modelName} error (limit/cap). Falling back to gemini-2.5-flash-lite...`);
-      return await generateWithGemini(apiKey, keyword, 'gemini-2.5-flash-lite');
+    // 429 에러 발생 시 리트라이 로직
+    if (error.message.includes('429') || error.message.includes('quota')) {
+      console.warn(`[Gemini] ${modelName} limit reached. Waiting for fallback...`);
     }
-    
-    console.error('Gemini Content Generation Error:', error);
-    throw new Error(`Failed to generate with Gemini: ${error.message}`);
+    throw error;
   }
 }
 
 /**
- * OpenAI DALL-E 3를 이용한 이미지 생성
+ * Google Gemini를 이용한 기존 원고 재작성 (Rewrite)
  */
-export async function generateImage(apiKey, prompt) {
-  const openai = new OpenAI({ apiKey });
+export async function generateRewriteWithGemini(apiKey, originalTitle, originalContent, modelPreference = 'auto') {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  
+  // 유저 명시적 요청: gemini-2.5-flash-lite 사용
+  let modelName = modelPreference === 'auto' ? 'gemini-2.5-flash-lite' : modelPreference;
+
+  console.log(`[Gemini/Rewrite] Rewriting content with model: ${modelName}`);
+
   try {
-    const response = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt: prompt,
-      n: 1,
-      size: '1024x1024',
-    });
-    return response.data[0].url;
+    const model = genAI.getGenerativeModel({ model: modelName });
+
+    const prompt = `당신은 블로그 포스팅 전문가입니다. 아래 제공된 [원본 제목]과 [원본 본문]의 핵심 내용을 유지하되, 
+네이버의 유사 문서 판독을 피할 수 있도록 완전히 새로운 문장 구조와 표현으로 다시 작성해주세요.
+반드시 아래 형식을 지켜주세요.
+[TITLE]새로운 제목[/TITLE]
+[CONTENT]새로운 본문[/CONTENT]
+
+[원본 제목]: ${originalTitle}
+[원본 본문]: ${originalContent}`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const fullText = response.text();
+    const parsed = parseAIResponse(fullText);
+    return { ...parsed, modelUsed: modelName };
   } catch (error) {
-    console.error('DALL-E Generation Error:', error);
-    throw new Error(`Failed to generate image: ${error.message}`);
+    console.error('Gemini Rewrite Error:', error);
+    throw error;
   }
 }
 
@@ -164,7 +140,7 @@ function parseAIResponse(fullText) {
  */
 export async function generateContent(engine, apiKeyOrConfig, keyword) {
   if (engine === 'gemini') {
-    const { apiKey, model } = apiKeyOrConfig; // apiKeyOrConfig가 객체로 오는 경우 대응
+    const { apiKey, model } = apiKeyOrConfig;
     const actualKey = typeof apiKeyOrConfig === 'string' ? apiKeyOrConfig : apiKey;
     const actualModel = typeof apiKeyOrConfig === 'string' ? 'auto' : model;
     return await generateWithGemini(actualKey, keyword, actualModel);
@@ -172,6 +148,6 @@ export async function generateContent(engine, apiKeyOrConfig, keyword) {
     const { endpoint, model } = apiKeyOrConfig;
     return await generateWithOllama(endpoint, model, keyword);
   } else {
-    return await generateWithOpenAI(apiKeyOrConfig, keyword);
+    throw new Error('OpenAI 서비스가 비활성화되었습니다. Gemini 또는 Ollama를 사용해주세요.');
   }
 }
