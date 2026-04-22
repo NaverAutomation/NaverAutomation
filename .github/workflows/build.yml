@@ -80,34 +80,40 @@ jobs:
       pull-requests: read
 
     steps:
-      - name: Publish release notes and clean up drafts
+      - name: Resolve version
+        id: version
+        run: echo "release_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute release notes (dry-run)
+        id: drafter
+        uses: release-drafter/release-drafter@v7.2.0
+        with:
+          config-name: release-drafter.yml
+          tag: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          version: ${{ steps.version.outputs.release_version }}
+          dry-run: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update release with computed notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          BODY: ${{ steps.drafter.outputs.body }}
+        run: |
+          echo "$BODY" > /tmp/release_notes.md
+          gh release edit "$TAG" --notes-file /tmp/release_notes.md --latest --repo "$GH_REPO"
+
+      - name: Clean up stale draft releases
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
-
-          # 가장 최근에 업데이트된 draft 릴리즈 노트 가져오기
-          DRAFT=$(gh api "repos/${GH_REPO}/releases" \
-            --jq '[.[] | select(.draft == true)] | sort_by(.updated_at) | reverse | .[0]')
-
-          DRAFT_ID=$(echo "$DRAFT" | jq -r '.id // empty')
-          DRAFT_BODY=$(echo "$DRAFT" | jq -r '.body // empty')
-
-          if [ -n "$DRAFT_ID" ] && [ -n "$DRAFT_BODY" ] && [ "$DRAFT_BODY" != "null" ]; then
-            echo "Updating release $TAG with draft notes..."
-            echo "$DRAFT_BODY" > /tmp/release_notes.md
-            gh release edit "$TAG" --notes-file /tmp/release_notes.md --latest
-          else
-            echo "No valid draft notes found, using auto-generated notes..."
-            gh release edit "$TAG" --generate-notes --latest
-          fi
-
-          # 남아있는 stale draft 릴리즈 전부 삭제
           gh api "repos/${GH_REPO}/releases" \
             --jq '.[] | select(.draft == true) | .id' | \
             while IFS= read -r id; do
               echo "Deleting stale draft release id: $id"
               gh api -X DELETE "repos/${GH_REPO}/releases/${id}" || true
             done
-
