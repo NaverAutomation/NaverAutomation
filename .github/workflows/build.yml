@@ -71,3 +71,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  publish_release_notes:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - name: Resolve release metadata
+        id: release_meta
+        run: |
+          echo "tag_name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "release_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish drafted release notes
+        uses: release-drafter/release-drafter@v7.2.0
+        with:
+          config-name: release-drafter.yml
+          tag: ${{ steps.release_meta.outputs.tag_name }}
+          name: ${{ steps.release_meta.outputs.tag_name }}
+          version: ${{ steps.release_meta.outputs.release_version }}
+          publish: true
+          latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
