@@ -18,6 +18,26 @@ import { supabase } from './utils/supabase.js';
 
 const WEB_APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'unknown';
 
+const resolveLatestVersion = (payload, fallbackVersion) => {
+  if (!payload || typeof payload !== 'object') {
+    return fallbackVersion;
+  }
+
+  if (payload.newVersion) {
+    return payload.newVersion;
+  }
+
+  if (payload.downloadedVersion) {
+    return payload.downloadedVersion;
+  }
+
+  if (payload.currentVersion) {
+    return payload.currentVersion;
+  }
+
+  return fallbackVersion;
+};
+
 const TABS = [
   { id: 'dashboard', label: '🏠 대시보드' },
   { id: 'accounts',  label: '👤 계정 관리' },
@@ -40,6 +60,7 @@ const App = () => {
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [settings, setSettings] = useState({ openai_api_key: '', gemini_api_key: '' });
   const [appVersion, setAppVersion] = useState('loading');
+  const [latestVersion, setLatestVersion] = useState('loading');
   const [updaterState, setUpdaterState] = useState({
     status: 'idle',
     message: '업데이트 대기 중',
@@ -100,6 +121,7 @@ const App = () => {
     const api = window.electronAPI;
     if (!api) {
       setAppVersion(WEB_APP_VERSION);
+      setLatestVersion(WEB_APP_VERSION);
       setUpdaterState({
         status: 'browser-mode',
         message: `브라우저 모드입니다. 현재 빌드 버전은 ${WEB_APP_VERSION} 입니다.`,
@@ -110,22 +132,27 @@ const App = () => {
 
     api.getAppVersion()
       .then((version) => {
-        setAppVersion(version || 'unknown');
+        const resolvedVersion = version || 'unknown';
+        setAppVersion(resolvedVersion);
+        setLatestVersion(resolvedVersion);
       })
       .catch(() => {
         setAppVersion('unknown');
+        setLatestVersion('unknown');
       });
 
     api.getLastUpdaterStatus()
       .then((status) => {
         if (status && status.status) {
           setUpdaterState(status);
+          setLatestVersion((prev) => resolveLatestVersion(status, prev || 'unknown'));
         }
       })
       .catch(() => {});
 
     const unsubscribe = api.onUpdaterStatus((payload) => {
       setUpdaterState(payload);
+      setLatestVersion((prev) => resolveLatestVersion(payload, prev || appVersion || 'unknown'));
       if (payload?.status === 'update-not-available' || payload?.status === 'error' || payload?.status === 'dev-mode') {
         setIsCheckingUpdate(false);
       }
@@ -259,7 +286,7 @@ const App = () => {
               setSettings={setSettings} 
               fetchAll={fetchAll}
               appVersion={appVersion}
-              updaterState={updaterState}
+              latestVersion={latestVersion}
               onManualUpdateCheck={handleManualUpdateCheck}
               isCheckingUpdate={isCheckingUpdate}
             />

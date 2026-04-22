@@ -59,6 +59,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      devTools: !app.isPackaged,
     },
     icon: path.join(__dirname, '../assets/icon.png')
   });
@@ -74,8 +75,12 @@ function createWindow() {
         retryCount++;
         setTimeout(loadApp, 1000);
       } else {
-        log('[Main] Max retries reached. Opening DevTools for diagnosis.');
-        mainWindow.webContents.openDevTools();
+        if (!app.isPackaged) {
+          log('[Main] Max retries reached. Opening DevTools for diagnosis.');
+          mainWindow.webContents.openDevTools();
+        } else {
+          log('[Main] Max retries reached in production mode.');
+        }
         dialog.showMessageBox({
           type: 'error',
           title: '페이지 로드 실패',

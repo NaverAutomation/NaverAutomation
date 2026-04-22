@@ -2,24 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 import { Card, SectionTitle, Input, Btn } from '../common';
 
-const STATUS_LABELS = {
-  idle: '대기 중',
-  'checking-for-update': '업데이트 확인 중',
-  'update-available': '새 버전 발견',
-  'download-progress': '다운로드 중',
-  'update-downloaded': '설치 준비 완료',
-  'update-not-available': '최신 버전',
-  error: '오류',
-  'dev-mode': '개발 모드',
-  'browser-mode': '브라우저 모드',
-};
-
 const SettingsTab = React.memo(({
   settings,
   setSettings,
   fetchAll,
   appVersion,
-  updaterState,
+  latestVersion,
   onManualUpdateCheck,
   isCheckingUpdate,
 }) => {
@@ -40,25 +28,16 @@ const SettingsTab = React.memo(({
     setLoading(false);
   };
 
-  const statusLabel = STATUS_LABELS[updaterState?.status] || updaterState?.status || '알 수 없음';
-  const statusTime = updaterState?.timestamp
-    ? new Date(updaterState.timestamp).toLocaleString('ko-KR')
-    : '기록 없음';
-
   return (
     <Card className="max-w-2xl mx-auto">
       <SectionTitle>⬆️ 앱 업데이트</SectionTitle>
       <div className="rounded-xl border border-base-300 bg-base-200/60 p-4 mb-8 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <p className="text-sm sm:text-base font-semibold text-base-content/80">
-            현재 앱 버전: <span className="font-mono">v{appVersion}</span>
-          </p>
-          <span className="badge badge-outline">{statusLabel}</span>
-        </div>
-        <p className="text-sm text-base-content/70 break-all">
-          최근 상태: {updaterState?.message || '업데이트 이벤트를 기다리는 중입니다.'}
+        <p className="text-sm sm:text-base font-semibold text-base-content/80">
+          최신 버전: <span className="font-mono">v{latestVersion}</span>
         </p>
-        <p className="text-xs text-base-content/50">최근 확인 시각: {statusTime}</p>
+        <p className="text-sm sm:text-base font-semibold text-base-content/80">
+          현재 앱 버전: <span className="font-mono">v{appVersion}</span>
+        </p>
         <div className="pt-1">
           <Btn
             variant="secondary"
