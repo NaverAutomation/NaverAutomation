@@ -1,11 +1,11 @@
 {
   "name": "naver-auto",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Naver Blog Automation with AI",
   "type": "module",
   "main": "src/main.js",
   "author": "Naver Auto Dev Team",
-  "homepage": "https://github.com/NaverAutomation/NaverAutomation",
+  "homepage": "./",
   "bin": {
     "naver-auto": "bin/cli.js"
   },
@@ -26,7 +26,7 @@
     "playwright:install": "playwright install chromium",
     "postinstall": "npm run playwright:install",
     "electron:dev": "cross-env NODE_ENV=development electron .",
-    "electron:build": "npm run build && npm run playwright:install && electron-builder build --win --publish never"
+    "electron:build": "npm run build && npm run playwright:install && electron-builder build --win --publish always"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
