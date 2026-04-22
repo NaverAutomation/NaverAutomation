@@ -86,10 +86,22 @@ jobs:
           echo "tag_name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           echo "release_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Get existing release id
+        id: existing_release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          release_id=$(gh api \
+            "repos/${{ github.repository }}/releases/tags/${{ steps.release_meta.outputs.tag_name }}" \
+            --jq '.id' 2>/dev/null || true)
+          echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
+
       - name: Publish drafted release notes
         uses: release-drafter/release-drafter@v7.2.0
         with:
           config-name: release-drafter.yml
+          release-id: ${{ steps.existing_release.outputs.release_id }}
           tag: ${{ steps.release_meta.outputs.tag_name }}
           name: ${{ steps.release_meta.outputs.tag_name }}
           version: ${{ steps.release_meta.outputs.release_version }}
