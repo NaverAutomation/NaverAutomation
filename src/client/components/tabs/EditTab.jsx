@@ -55,7 +55,7 @@ const EditTab = React.memo(() => {
               className="select select-bordered bg-base-100 font-semibold shadow-sm w-full sm:w-auto"
             >
               <option value="openai">🤖 GPT-4o (권장)</option>
-              <option value="gemini">✨ Gemini</option>
+              <option value="gemini">✨ 클라우드 AI API</option>
               <option value="ollama">🦙 Ollama</option>
             </select>
             <Btn variant="primary" onClick={handleEdit} disabled={loading} className="flex-1">

@@ -22,16 +22,8 @@ const SettingsTab = React.memo(({ settings, setSettings, fetchAll }) => {
 
   return (
     <Card className="max-w-2xl mx-auto">
-      <SectionTitle>⚙️ API 키 설정</SectionTitle>
+      <SectionTitle>⚙️ 서비스 엔진 설정</SectionTitle>
       <div className="flex flex-col gap-2">
-        <Input
-          label="Google Gemini API Key"
-          type="password"
-          placeholder="AIza..."
-          value={localSettings.gemini_api_key || ''}
-          onChange={e => setLocalSettings({ ...localSettings, gemini_api_key: e.target.value })}
-        />
-
         <div className="flex flex-col gap-1 mb-2">
           <label className="label-text font-bold px-1 text-base-content/70">AI 모델 설정</label>
           <select
@@ -49,8 +41,9 @@ const SettingsTab = React.memo(({ settings, setSettings, fetchAll }) => {
           <div>
             <p className="font-bold mb-1">안내 사항</p>
             <ul className="list-disc pl-4 space-y-1">
-              <li>API 키는 AES-256-GCM 암호화로 안전하게 저장됩니다.</li>
-              <li>모든 블로그 원고 생성 및 자동 재작성(Rewrite)은 AI 엔진을 통해 수행됩니다.</li>
+              <li>AI API 키는 서버에서 안전하게 관리되므로 별도로 입력할 필요가 없습니다.</li>
+              <li>모든 블로그 원고 생성 및 자동 재작성(Rewrite)은 서버 AI 엔진을 통해 수행됩니다.</li>
+              <li>개인용 로컬 AI를 사용하려면 하단의 Ollama 설정을 이용하세요.</li>
             </ul>
           </div>
         </div>

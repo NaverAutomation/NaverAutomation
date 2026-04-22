@@ -1,59 +1,57 @@
-# naver-auto
+# Naver Auto (v1.0.0)
 
-AI-powered Naver Blog automation tool.
+AI 기반 네이버 블로그 자동화 솔루션입니다. 본 프로젝트는 Supabase 인증을 통한 보안 강화와 Gemini/Ollama를 활용한 지능형 콘텐츠 생성을 지원합니다.
 
-## Key Features
-- **GPT/DALL-E Integration:** Generate blog content and images automatically using AI.
-- **Multi-account Management:** Manage multiple Naver accounts and blogs.
-- **Playwright Automation:** Reliable and robust blog posting automation.
-- **Interactive Dashboard:** Easy-to-use React-based dashboard for managing tasks and settings.
+## 🚀 주요 기능
 
-## Setup Requirements
-- **Node.js:** Version 18.0.0 or higher.
-- **OpenAI API Key:** For content generation (GPT-4/DALL-E 3).
+- **다양한 AI 엔진 지원:** Google Gemini (최적화 모델 사용) 및 Ollama(로컬 LLM)를 통한 원고 생성 및 교정.
+- **24/7 무한 루프 자동화 (캠페인):** 설정된 캠페인 데이터를 바탕으로 AI가 원고를 매번 새롭게 재작성하여 24시간 자동으로 포스팅합니다.
+- **다중 계정 관리:** 여러 네이버 계정을 등록하고 라운드 로빈 방식으로 분산 포스팅을 수행합니다.
+- **Supabase 인증 및 보안:** 안전한 로그인을 제공하며, 유저별 데이터 격리를 통해 개인별 설정을 보호합니다.
+- **Playwright 기반 안정성:** 최신 웹 자동화 기술을 사용하여 네이버 블로그 에디터에 안정적으로 글을 작성합니다.
+- **반응형 대시보드:** React 기반의 현대적인 UI로 모든 작업 상태와 로그를 실시간으로 모니터링합니다.
 
-## Installation and Usage
+## 📋 사전 준비 사항
 
-You can run `naver-auto` directly using `npx`:
+- **Node.js:** v18.0.0 이상.
+- **Supabase 프로젝트:** 인증 처리를 위한 Supabase URL 및 API Key 필요.
+- **AI API Key:** 
+  - **Gemini:** Google AI Studio에서 발급받은 API 키.
+  - **Ollama (선택 사항):** 로컬에서 구동 중인 Ollama 엔드포인트.
 
-```bash
-npx naver-auto
-```
+## 🛠 설치 및 실행 방법
 
-This will:
-1. Start the backend server on `http://localhost:3000`.
-2. Open your default browser to the dashboard.
+### 로컬 개발 설정
 
-### Local Development Setup
-
-If you want to clone and run the project locally:
-
-1. Clone the repository:
+1. **저장소 클론:**
    ```bash
-   git clone https://github.com/your-repo/naver-auto.git
-   cd naver-auto
+   git clone https://github.com/NaverAutomation/NaverAutomation.git
+   cd NaverAutomation
    ```
 
-2. Install dependencies:
+2. **의존성 설치:**
    ```bash
    npm install
    ```
-   This project automatically installs the Playwright Chromium browser during installation.
+   *설치 시 Playwright 브라우저가 자동으로 함께 설치됩니다.*
 
-   If browser installation fails due to network/security policy, run:
-   ```bash
-   npm run playwright:install
-   ```
-
-3. Build the client:
+3. **클라이언트 빌드:**
    ```bash
    npm run client:build
    ```
 
-4. Start the server:
+4. **서버 실행:**
    ```bash
    npm start
    ```
 
-## Configuration
-When you first run the app, you will need to provide your OpenAI API Key and Naver account details through the dashboard. All sensitive information is stored locally in an encrypted database (`naver-auto.db`).
+## ⚙️ 설정 및 사용법
+
+1. **로그인:** 앱 실행 후 Supabase 관리자 계정으로 로그인합니다.
+2. **설정:** `⚙️ 설정` 탭에서 Gemini API 키 또는 Ollama 설정을 입력합니다.
+3. **계정 등록:** `👤 계정 관리`에서 포스팅에 사용할 네이버 계정을 등록합니다.
+4. **캠페인 설정:** `🎯 캠페인` 탭에서 자동화할 원본 원고를 등록하고 작업을 시작하면 AI가 자동으로 원고를 변환하여 포스팅을 시작합니다.
+
+## 🔒 보안
+
+모든 민감한 정보(네이버 비밀번호, API 키 등)는 로컬 데이터베이스(`naver-auto.db`)에 암호화되어 저장되며, 사용자 본인만 접근할 수 있도록 Supabase 토큰으로 보호됩니다.

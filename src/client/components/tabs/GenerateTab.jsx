@@ -282,7 +282,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
               onChange={e => setEngine(e.target.value)}
               className="select select-lg select-bordered w-full bg-base-100 font-semibold"
             >
-              <option value="gemini">✨ Google Gemini</option>
+              <option value="gemini">✨ 클라우드 AI API</option>
               <option value="ollama">🦙 Ollama (로컬무료)</option>
             </select>
           </div>
@@ -301,7 +301,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
             {generated.modelUsed && (
               <div className="badge badge-outline badge-sm py-3 px-3 gap-2 text-base-content/60 border-base-300 font-medium">
                 <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-                {engine === 'gemini' ? 'AI 엔진 (Gemini)' : '로컬 엔진 (Ollama)'} 사용됨
+                {engine === 'gemini' ? 'AI 엔진 (클라우드)' : '로컬 엔진 (Ollama)'} 사용됨
               </div>
             )}
           </div>

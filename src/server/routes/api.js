@@ -1,5 +1,6 @@
 import express from 'express';
 import db from '../db/database.js';
+import { CONFIG } from '../config.js';
 import { generateContent } from '../services/ai-service.js';
 import { postToNaver } from '../services/naver-service.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
@@ -83,16 +84,7 @@ router.get('/settings', (req, res) => {
   db.all('SELECT * FROM settings WHERE user_id = ?', [req.user.id], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     const settings = rows.reduce((acc, row) => {
-      let value = row.value;
-      const sensitiveKeys = ['gemini_api_key'];
-      if (sensitiveKeys.includes(row.key) && value) {
-        if (value.length > 8) {
-          value = `${value.slice(0, 3)}-****${value.slice(-4)}`;
-        } else {
-          value = '****';
-        }
-      }
-      return { ...acc, [row.key]: value };
+      return { ...acc, [row.key]: row.value };
     }, {});
     res.json(settings);
   });
@@ -103,14 +95,7 @@ router.post('/settings', (req, res) => {
   const settings = req.body;
   db.serialize(() => {
     Object.entries(settings).forEach(([key, value]) => {
-      const sensitiveKeys = ['gemini_api_key'];
-      if (sensitiveKeys.includes(key)) {
-        if (value && value.includes('****')) return;
-        const encryptedValue = value ? encrypt(value) : value;
-        db.run('INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, ?, ?)', [req.user.id, key, encryptedValue]);
-      } else {
-        db.run('INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, ?, ?)', [req.user.id, key, value]);
-      }
+      db.run('INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, ?, ?)', [req.user.id, key, value]);
     });
     res.json({ success: true });
   });
@@ -120,8 +105,8 @@ router.post('/settings', (req, res) => {
 // AI GENERATE
 // ─────────────────────────────────────────────
 
-// 공통: DB에서 API 키 가져오기
-async function getApiKeyFromDB(userId, keyName) {
+// 공통: DB에서 설정 가져오기
+async function getSettingFromDB(userId, keyName) {
   return new Promise((resolve, reject) => {
     db.get('SELECT value FROM settings WHERE user_id = ? AND key = ?', [userId, keyName], (err, row) => {
       if (err) return reject(err);
@@ -138,16 +123,14 @@ router.post('/generate', async (req, res) => {
   try {
     let aiConfig;
     if (engine === 'ollama') {
-      const endpoint = (await getApiKeyFromDB(req.user.id, 'ollama_endpoint')) || 'http://localhost:11434';
-      const model = (await getApiKeyFromDB(req.user.id, 'ollama_model')) || 'llama3';
+      const endpoint = (await getSettingFromDB(req.user.id, 'ollama_endpoint')) || 'http://localhost:11434';
+      const model = (await getSettingFromDB(req.user.id, 'ollama_model')) || 'llama3';
       aiConfig = { endpoint, model };
     } else {
-      const settingsKey = 'gemini_api_key';
-      const encApiKey = await getApiKeyFromDB(req.user.id, settingsKey);
-      if (!encApiKey) return res.status(400).json({ error: `Gemini API 키가 설정되지 않았습니다.` });
+      if (!CONFIG.GEMINI_API_KEY) return res.status(500).json({ error: `서버에 AI API 키가 설정되지 않았습니다. 관리자에게 문의하세요.` });
       
-      const apiKey = decrypt(encApiKey);
-      const model = (await getApiKeyFromDB(req.user.id, 'gemini_model')) || 'auto';
+      const apiKey = CONFIG.GEMINI_API_KEY;
+      const model = (await getSettingFromDB(req.user.id, 'gemini_model')) || 'auto';
       aiConfig = { apiKey, model };
     }
 
@@ -166,8 +149,8 @@ router.post('/generate/edit', async (req, res) => {
   try {
     let editedContent;
     if (engine === 'ollama') {
-      const endpoint = (await getApiKeyFromDB(req.user.id, 'ollama_endpoint')) || 'http://localhost:11434';
-      const model = (await getApiKeyFromDB(req.user.id, 'ollama_model')) || 'gemma4:e4b';
+      const endpoint = (await getSettingFromDB(req.user.id, 'ollama_endpoint')) || 'http://localhost:11434';
+      const model = (await getSettingFromDB(req.user.id, 'ollama_model')) || 'gemma4:e4b';
       
       let baseUrl = endpoint.trim();
       if (baseUrl.endsWith('/api/generate')) {
@@ -190,11 +173,10 @@ router.post('/generate/edit', async (req, res) => {
       const data = await response.json();
       editedContent = data.response;
     } else {
-      const settingsKey = 'gemini_api_key';
-      const encApiKey = await getApiKeyFromDB(req.user.id, settingsKey);
-      if (!encApiKey) return res.status(400).json({ error: `GEMINI API 키가 설정되지 않았습니다.` });
-      const apiKey = decrypt(encApiKey);
-      const geminiModelPreference = (await getApiKeyFromDB(req.user.id, 'gemini_model')) || 'auto';
+      if (!CONFIG.GEMINI_API_KEY) return res.status(500).json({ error: `서버에 AI API 키가 설정되지 않았습니다. 관리자에게 문의하세요.` });
+      
+      const apiKey = CONFIG.GEMINI_API_KEY;
+      const geminiModelPreference = (await getSettingFromDB(req.user.id, 'gemini_model')) || 'auto';
       
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(apiKey);
