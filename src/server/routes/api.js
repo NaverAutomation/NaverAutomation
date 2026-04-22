@@ -5,6 +5,7 @@ import { generateContent } from '../services/ai-service.js';
 import { postToNaver } from '../services/naver-service.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
 import { startScheduler, stopScheduler, getSchedulerStatus, processScheduledPosts } from '../services/scheduler.js';
+import { getGlobalSetting } from '../utils/supabase.js';
 
 const router = express.Router();
 
@@ -127,9 +128,12 @@ router.post('/generate', async (req, res) => {
       const model = (await getSettingFromDB(req.user.id, 'ollama_model')) || 'llama3';
       aiConfig = { endpoint, model };
     } else {
-      if (!CONFIG.GEMINI_API_KEY) return res.status(500).json({ error: `서버에 AI API 키가 설정되지 않았습니다. 관리자에게 문의하세요.` });
+      const masterKey = await getGlobalSetting('master_gemini_api_key');
+      if (!masterKey || masterKey === 'YOUR_KEY_HERE') {
+        return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
+      }
       
-      const apiKey = CONFIG.GEMINI_API_KEY;
+      const apiKey = masterKey;
       const model = (await getSettingFromDB(req.user.id, 'gemini_model')) || 'auto';
       aiConfig = { apiKey, model };
     }
@@ -173,9 +177,12 @@ router.post('/generate/edit', async (req, res) => {
       const data = await response.json();
       editedContent = data.response;
     } else {
-      if (!CONFIG.GEMINI_API_KEY) return res.status(500).json({ error: `서버에 AI API 키가 설정되지 않았습니다. 관리자에게 문의하세요.` });
+      const masterKey = await getGlobalSetting('master_gemini_api_key');
+      if (!masterKey || masterKey === 'YOUR_KEY_HERE') {
+        return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
+      }
       
-      const apiKey = CONFIG.GEMINI_API_KEY;
+      const apiKey = masterKey;
       const geminiModelPreference = (await getSettingFromDB(req.user.id, 'gemini_model')) || 'auto';
       
       const { GoogleGenerativeAI } = await import('@google/generative-ai');

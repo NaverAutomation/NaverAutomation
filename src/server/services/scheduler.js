@@ -3,6 +3,7 @@ import { generateRewriteWithGemini } from './ai-service.js';
 import { postToNaver } from './naver-service.js';
 import { decrypt } from '../utils/crypto.js';
 import { CONFIG } from '../config.js';
+import { getGlobalSetting } from '../utils/supabase.js';
 
 // 스케줄러 상태
 let schedulerInterval = null;
@@ -98,11 +99,12 @@ async function performTask(campaign) {
     }
 
     // 2. API 키 확인 (공용 키 사용)
-    if (!CONFIG.GEMINI_API_KEY) {
-      emitLog('error', `서버에 AI API 키가 설정되지 않아 작업을 수행할 수 없습니다.`, userId);
+    const masterKey = await getGlobalSetting('master_gemini_api_key');
+    if (!masterKey || masterKey === 'YOUR_KEY_HERE') {
+      emitLog('error', `API 호출에 실패했습니다. 관리자에게 문의하세요.`, userId);
       return;
     }
-    const apiKey = CONFIG.GEMINI_API_KEY;
+    const apiKey = masterKey;
 
     emitLog('info', `계정 ${account.naver_id}로 포스팅을 시작합니다. (오늘 ${account.daily_post_count + 1}회째)`, userId);
 

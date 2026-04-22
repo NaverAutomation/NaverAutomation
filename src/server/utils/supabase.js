@@ -29,18 +29,24 @@ export async function getUserSecret(userId, key) {
 }
 
 /**
- * Set a user secret in Supabase.
- * @param {string} userId - User UUID
- * @param {string} key - Secret key
- * @param {string} value - Secret value
+ * Get a global setting from Supabase.
+ * @param {string} key - Global setting key
+ * @returns {Promise<string|null>}
  */
-export async function setUserSecret(userId, key, value) {
-  const { error } = await supabase
-    .from('user_secrets')
-    .upsert({ user_id: userId, key, value, updated_at: new Date().toISOString() });
+export async function getGlobalSetting(key) {
+  // Global settings usually require service_role, but for simplicity we enable read if you want
+  // Or we use the existing client if RLS allows it.
+  const { data, error } = await supabase
+    .from('global_settings')
+    .select('value')
+    .eq('key', key)
+    .single();
 
   if (error) {
-    console.error('Error setting secret in Supabase:', error);
-    throw error;
+    if (error.code !== 'PGRST116') {
+      console.error('Error fetching global setting from Supabase:', error);
+    }
+    return null;
   }
+  return data ? data.value : null;
 }
