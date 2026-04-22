@@ -67,6 +67,7 @@ const App = () => {
     timestamp: null,
   });
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [manualUpdateRequested, setManualUpdateRequested] = useState(false);
 
   // ── Auth 세션 관리
   useEffect(() => {
@@ -170,6 +171,27 @@ const App = () => {
     fetchAll();
   }, [fetchAll]);
 
+  useEffect(() => {
+    if (!manualUpdateRequested) {
+      return;
+    }
+
+    if (updaterState.status === 'update-not-available') {
+      alert('현재 최신 버전입니다.');
+      setManualUpdateRequested(false);
+      return;
+    }
+
+    if (
+      updaterState.status === 'update-available' ||
+      updaterState.status === 'error' ||
+      updaterState.status === 'dev-mode' ||
+      updaterState.status === 'browser-mode'
+    ) {
+      setManualUpdateRequested(false);
+    }
+  }, [manualUpdateRequested, updaterState.status]);
+
   // ── 핸들러
   const handleTaskToggle = async () => {
     try {
@@ -187,15 +209,23 @@ const App = () => {
 
   const handleManualUpdateCheck = async () => {
     const api = window.electronAPI;
+    const versionsMatch = latestVersion && appVersion && latestVersion === appVersion;
+
     if (!api) {
-      alert('웹 모드에서는 데스크톱 업데이트를 확인할 수 없습니다.');
+      if (versionsMatch) {
+        alert('현재 최신 버전입니다.');
+      } else {
+        alert('업데이트 확인을 사용할 수 없습니다.');
+      }
       return;
     }
 
+    setManualUpdateRequested(true);
     setIsCheckingUpdate(true);
     const result = await api.checkForUpdates();
     if (!result?.ok) {
       setIsCheckingUpdate(false);
+      setManualUpdateRequested(false);
     }
   };
 
