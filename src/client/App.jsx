@@ -37,6 +37,13 @@ const App = () => {
   const [posts, setPosts] = useState([]);
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [settings, setSettings] = useState({ openai_api_key: '', gemini_api_key: '' });
+  const [appVersion, setAppVersion] = useState('loading');
+  const [updaterState, setUpdaterState] = useState({
+    status: 'idle',
+    message: '업데이트 대기 중',
+    timestamp: null,
+  });
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   // ── Auth 세션 관리
   useEffect(() => {
@@ -88,6 +95,44 @@ const App = () => {
   useSocket(onLog, onTaskStatus);
 
   useEffect(() => {
+    const api = window.electronAPI;
+    if (!api) {
+      setAppVersion('web');
+      return;
+    }
+
+    api.getAppVersion()
+      .then((version) => {
+        setAppVersion(version || 'unknown');
+      })
+      .catch(() => {
+        setAppVersion('unknown');
+      });
+
+    api.getLastUpdaterStatus()
+      .then((status) => {
+        if (status && status.status) {
+          setUpdaterState(status);
+        }
+      })
+      .catch(() => {});
+
+    const unsubscribe = api.onUpdaterStatus((payload) => {
+      setUpdaterState(payload);
+      if (payload?.status === 'update-not-available' || payload?.status === 'error' || payload?.status === 'dev-mode') {
+        setIsCheckingUpdate(false);
+      }
+      if (payload?.status === 'update-available' || payload?.status === 'update-downloaded') {
+        setIsCheckingUpdate(false);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
     fetchAll();
   }, [fetchAll]);
 
@@ -106,6 +151,20 @@ const App = () => {
     await supabase.auth.signOut();
   };
 
+  const handleManualUpdateCheck = async () => {
+    const api = window.electronAPI;
+    if (!api) {
+      alert('웹 모드에서는 데스크톱 업데이트를 확인할 수 없습니다.');
+      return;
+    }
+
+    setIsCheckingUpdate(true);
+    const result = await api.checkForUpdates();
+    if (!result?.ok) {
+      setIsCheckingUpdate(false);
+    }
+  };
+
   if (!isAuthenticated) {
     return <Login onLogin={() => setIsAuthenticated(true)} />;
   }
@@ -119,7 +178,7 @@ const App = () => {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-black text-primary drop-shadow-sm">Naver Blog Auto</h1>
-              <span className="badge badge-sm badge-neutral opacity-50 font-mono">v0.2.2</span>
+              <span className="badge badge-sm badge-neutral opacity-50 font-mono">v{appVersion}</span>
             </div>
             <p className="text-xs sm:text-sm text-base-content/60 font-semibold">AI 기반 네이버 블로그 자동화</p>
           </div>
@@ -191,7 +250,11 @@ const App = () => {
             <SettingsTab 
               settings={settings} 
               setSettings={setSettings} 
-              fetchAll={fetchAll} 
+              fetchAll={fetchAll}
+              appVersion={appVersion}
+              updaterState={updaterState}
+              onManualUpdateCheck={handleManualUpdateCheck}
+              isCheckingUpdate={isCheckingUpdate}
             />
           ) : null}
           {activeTab === 'accounts' ? (

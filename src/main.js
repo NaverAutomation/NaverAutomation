@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pkgUpdater from 'electron-updater';
@@ -28,6 +28,11 @@ log('[Main] App starting...');
 let mainWindow;
 let server;
 let serverPort = 3000;
+let lastUpdaterStatus = {
+  status: 'idle',
+  message: '업데이트 대기 중',
+  timestamp: new Date().toISOString(),
+};
 
 async function initBackend() {
   log('[Main] Backend initializing...');
@@ -53,6 +58,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
     icon: path.join(__dirname, '../assets/icon.png')
   });
@@ -87,6 +93,48 @@ function createWindow() {
   });
 }
 
+function sendUpdaterStatus(status, message, extra = {}) {
+  lastUpdaterStatus = {
+    status,
+    message,
+    timestamp: new Date().toISOString(),
+    ...extra,
+  };
+
+  log(`[Auto-Updater Status] ${message}`);
+
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('updater:status', lastUpdaterStatus);
+  }
+}
+
+function registerIpcHandlers() {
+  ipcMain.handle('app:getVersion', () => {
+    return app.getVersion();
+  });
+
+  ipcMain.handle('updater:getLastStatus', () => {
+    return lastUpdaterStatus;
+  });
+
+  ipcMain.handle('updater:checkForUpdates', async () => {
+    if (!app.isPackaged) {
+      const message = '개발 모드에서는 자동 업데이트를 확인하지 않습니다.';
+      sendUpdaterStatus('dev-mode', message);
+      return { ok: false, reason: 'dev-mode', message };
+    }
+
+    try {
+      await autoUpdater.checkForUpdates();
+      return { ok: true };
+    } catch (err) {
+      const message = `업데이트 확인 실패: ${err.message}`;
+      sendUpdaterStatus('error', message);
+      return { ok: false, reason: 'check-failed', message };
+    }
+  });
+}
+
 // 자동 업데이트 설정 및 강화
 function setupAutoUpdater() {
   // 업데이트 로그 설정
@@ -98,25 +146,26 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = true;
   autoUpdater.allowPrerelease = false;
 
-  // 업데이트 상태를 창으로 전송하는 함수
-  const sendStatusToWindow = (text) => {
-    log(`[Auto-Updater Status] ${text}`);
-    if (mainWindow && mainWindow.webContents) {
-      mainWindow.webContents.executeJavaScript(`console.log("Auto-Updater: ${text}")`);
-    }
-  };
+  log(`[Auto-Updater] Current app version: ${app.getVersion()}`);
+
+  if (!app.isPackaged) {
+    sendUpdaterStatus('dev-mode', '개발 모드에서는 자동 업데이트를 확인하지 않습니다.');
+    return;
+  }
 
   // 업데이트 상태 확인
   autoUpdater.checkForUpdatesAndNotify();
 
   // 업데이트를 찾고 있을 때
   autoUpdater.on('checking-for-update', () => {
-    sendStatusToWindow('업데이트 확인 중...');
+    sendUpdaterStatus('checking-for-update', '업데이트 확인 중...');
   });
 
   // 새로운 버전 발견
   autoUpdater.on('update-available', (info) => {
-    sendStatusToWindow(`새로운 버전 발견: ${info.version}`);
+    sendUpdaterStatus('update-available', `새로운 버전 발견: ${info.version}`, {
+      newVersion: info.version,
+    });
     dialog.showMessageBox({
       type: 'info',
       title: '새로운 업데이트',
@@ -126,8 +175,10 @@ function setupAutoUpdater() {
   });
 
   // 업데이트가 없을 때
-  autoUpdater.on('update-not-available', (info) => {
-    sendStatusToWindow('현재 최신 버전입니다.');
+  autoUpdater.on('update-not-available', (_info) => {
+    sendUpdaterStatus('update-not-available', '현재 최신 버전입니다.', {
+      currentVersion: app.getVersion(),
+    });
   });
 
   // 다운로드 진행 상황 (대용량 파일 대비)
@@ -135,12 +186,18 @@ function setupAutoUpdater() {
     let log_message = `다운로드 속도: ${progressObj.bytesPerSecond}`;
     log_message = `${log_message} - 현재 ${Math.round(progressObj.percent)}% 완료`;
     log_message = `${log_message} (${progressObj.transferred}/${progressObj.total})`;
-    sendStatusToWindow(log_message);
+    sendUpdaterStatus('download-progress', log_message, {
+      percent: Math.round(progressObj.percent),
+      transferred: progressObj.transferred,
+      total: progressObj.total,
+    });
   });
 
   // 다운로드 완료 시 설치 제안
   autoUpdater.on('update-downloaded', (info) => {
-    sendStatusToWindow('다운로드 완료. 설치 준비 중...');
+    sendUpdaterStatus('update-downloaded', '다운로드 완료. 설치 준비 중...', {
+      downloadedVersion: info.version,
+    });
     dialog.showMessageBox({
       type: 'question',
       buttons: ['지금 설치 후 재시작', '나중에'],
@@ -158,13 +215,14 @@ function setupAutoUpdater() {
   // 업데이트 중 오류 발생
   autoUpdater.on('error', (err) => {
     log(`[Auto-Updater Error] ${err}`);
-    sendStatusToWindow(`오류 발생: ${err.message}`);
+    sendUpdaterStatus('error', `오류 발생: ${err.message}`);
   });
 }
 
 app.whenReady().then(async () => {
   await initBackend();
   createWindow();
+  registerIpcHandlers();
   setupAutoUpdater();
 
   app.on('activate', () => {

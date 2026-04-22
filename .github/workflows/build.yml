@@ -43,6 +43,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate tag and app version match
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (-not $tag.StartsWith('v')) {
+            Write-Error "Tag must start with v. Actual: $tag"
+            exit 1
+          }
+
+          $tagVersion = $tag.Substring(1)
+          $packageVersion = node -p "require('./package.json').version"
+
+          Write-Host "Tag version: $tagVersion"
+          Write-Host "package.json version: $packageVersion"
+
+          if ($tagVersion -ne $packageVersion) {
+            Write-Error "Version mismatch. Tag=$tagVersion package.json=$packageVersion"
+            exit 1
+          }
+
       - name: Build Web App
         run: npm run build
 
