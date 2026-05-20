@@ -60,11 +60,14 @@ jobs:
       pull-requests: read
 
     steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
       - name: Resolve version
         id: version
         run: echo "release_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Publish release with Release Drafter
+      - name: Generate Release Notes
         id: drafter
         uses: release-drafter/release-drafter@v7.2.0
         with:
@@ -72,9 +75,17 @@ jobs:
           tag: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           version: ${{ steps.version.outputs.release_version }}
-          publish: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update existing release with notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          BODY: ${{ steps.drafter.outputs.body }}
+        run: |
+          # electron-builder가 이미 생성한 릴리스의 본문을 업데이트합니다.
+          gh release edit "$TAG_NAME" --notes "$BODY" || gh release create "$TAG_NAME" --notes "$BODY"
 
       - name: Clean up stale draft releases
         env:
