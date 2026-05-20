@@ -3,7 +3,7 @@ import { generateRewriteWithGemini } from './ai-service.js';
 import { postToNaver } from './naver-service.js';
 import { decrypt } from '../utils/crypto.js';
 import { CONFIG } from '../config.js';
-import { getGlobalSetting } from '../utils/supabase.js';
+import { getGlobalSetting, getCachedGlobalSetting } from '../utils/supabase.js';
 
 // 스케줄러 상태
 let schedulerInterval = null;
@@ -70,7 +70,7 @@ async function getAvailableAccount(userId) {
         
         // 2. 한도가 남은 계정 중 가장 오랫동안 안 쓴 계정 선택
         db.get(
-          "SELECT * FROM accounts WHERE user_id = ? AND status = 'active' AND daily_post_count < 3 ORDER BY round_robin_order ASC LIMIT 1",
+          "SELECT * FROM accounts WHERE user_id = ? AND status = 'active' AND daily_post_count < 10 ORDER BY round_robin_order ASC LIMIT 1",
           [userId],
           (err, row) => {
             if (err) return reject(err);
@@ -98,10 +98,13 @@ async function performTask(campaign) {
       return;
     }
 
-    // 2. API 키 확인 (공용 키 사용)
-    const masterKey = await getGlobalSetting('master_gemini_api_key');
+    // 2. API 키 확인 (캐시 우선, 없으면 Supabase anon 시도)
+    let masterKey = getCachedGlobalSetting('master_gemini_api_key');
+    if (!masterKey) {
+      masterKey = await getGlobalSetting('master_gemini_api_key');
+    }
     if (!masterKey || masterKey === 'YOUR_KEY_HERE') {
-      emitLog('error', `API 호출에 실패했습니다. 관리자에게 문의하세요.`, userId);
+      emitLog('error', `Gemini API 키를 가져올 수 없습니다. 먼저 "글 생성" 탭에서 초안 뽑기를 1회 실행하여 API 키를 활성화해주세요.`, userId);
       return;
     }
     const apiKey = masterKey;
@@ -117,7 +120,7 @@ async function performTask(campaign) {
       title: aiResult.title,
       content: aiResult.content,
       image_url: campaign.image_url,
-    }, { headless: true });
+    }, { headless: CONFIG.HEADLESS });
 
     if (postResult.success) {
       // 5. 성공 시 계정 카운트 및 순서 업데이트

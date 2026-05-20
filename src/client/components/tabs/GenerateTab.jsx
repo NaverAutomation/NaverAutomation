@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 import { Card, SectionTitle, Input, Btn, Textarea } from '../common';
 
-const ManualComposeCard = React.memo(({ accounts, fetchAll }) => {
+const ManualComposeCard = React.memo(({ accounts, fetchAll, reusedPost, clearReusedPost }) => {
   const [manualTitle, setManualTitle] = useState('');
   const [manualContent, setManualContent] = useState('');
   const [manualImageUrl, setManualImageUrl] = useState('');
@@ -13,11 +13,61 @@ const ManualComposeCard = React.memo(({ accounts, fetchAll }) => {
   const [manualUseRoundRobin, setManualUseRoundRobin] = useState(true);
   const [manualHeadless, setManualHeadless] = useState(true);
 
+  // 이력 재사용 이벤트 처리
+  useEffect(() => {
+    if (reusedPost) {
+      setManualTitle(reusedPost.title || '');
+      setManualContent(reusedPost.content || '');
+      setManualImageUrl(reusedPost.image_url || '');
+      
+      const manualCard = document.getElementById('manual-compose-card');
+      if (manualCard) {
+        manualCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      clearReusedPost();
+    }
+  }, [reusedPost, clearReusedPost]);
+
   useEffect(() => {
     if (accounts.length > 0 && !manualSelectedAccountId) {
       setManualSelectedAccountId(accounts[0].id.toString());
     }
   }, [accounts, manualSelectedAccountId]);
+
+  // 로컬 이미지 업로드 처리
+  const handleImageUpload = async (e, setUrlCallback) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('이미지 크기는 5MB 이하여야 합니다.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const res = await apiFetch('/api/upload', {
+          method: 'POST',
+          body: JSON.stringify({
+            fileName: file.name,
+            base64Data: reader.result
+          })
+        });
+        if (res.success && res.url) {
+          setUrlCallback(res.url);
+        } else {
+          alert('이미지 업로드 실패: ' + (res.error || '알 수 없는 오류'));
+        }
+      } catch (err) {
+        alert('업로드 오류: ' + err.message);
+      }
+    };
+    reader.onerror = () => {
+      alert('파일 읽기 오류가 발생했습니다.');
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleManualPost = async () => {
     if (!manualTitle.trim() || !manualContent.trim()) return alert('제목과 본문을 입력하세요.');
@@ -84,9 +134,9 @@ const ManualComposeCard = React.memo(({ accounts, fetchAll }) => {
   };
 
   return (
-    <Card>
+    <Card id="manual-compose-card">
       <SectionTitle>📝 수기 작성 발행</SectionTitle>
-      <div className="bg-base-100 p-6 rounded-2xl border border-base-300 shadow-inner">
+      <div className="bg-base-100 p-6 rounded-2xl border border-base-300 shadow-inner space-y-6">
         <Input
           label="포스트 제목"
           className="font-bold text-lg"
@@ -100,12 +150,43 @@ const ManualComposeCard = React.memo(({ accounts, fetchAll }) => {
           value={manualContent}
           onChange={e => setManualContent(e.target.value)}
         />
-        <Input
-          label="커버 이미지 URL (선택)"
-          type="text"
-          value={manualImageUrl}
-          onChange={e => setManualImageUrl(e.target.value)}
-        />
+        
+        <div className="form-control">
+          <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
+            📸 블로그 본문 맨 위에 박아둘 사진 (직접 업로드 또는 URL 입력)
+          </label>
+          <div className="flex gap-3 items-center">
+            <input
+              type="text"
+              className="input input-bordered flex-1 bg-base-100 placeholder-base-content/30 focus:border-primary shadow-inner"
+              placeholder="https://... 또는 직접 파일 업로드"
+              value={manualImageUrl}
+              onChange={e => setManualImageUrl(e.target.value)}
+            />
+            <label className="btn btn-neutral hover:scale-[1.02] transition-transform cursor-pointer gap-2">
+              ➕ 사진 선택
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleImageUpload(e, setManualImageUrl)}
+              />
+            </label>
+          </div>
+          {manualImageUrl && (
+            <div className="mt-4 relative group w-full max-w-sm rounded-xl overflow-hidden border border-base-300 shadow-md">
+              <img src={manualImageUrl} alt="Preview" className="w-full h-auto object-cover max-h-48" />
+              <button 
+                type="button"
+                onClick={() => setManualImageUrl('')}
+                className="absolute top-2 right-2 btn btn-circle btn-xs btn-error shadow hover:scale-105"
+                title="이미지 제거"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="mt-8 p-6 bg-base-300/40 border border-base-300 rounded-2xl flex flex-col lg:flex-row gap-6 lg:items-end">
@@ -168,7 +249,7 @@ const ManualComposeCard = React.memo(({ accounts, fetchAll }) => {
   );
 });
 
-const GenerateTab = React.memo(({ accounts, fetchAll }) => {
+const GenerateTab = React.memo(({ accounts, fetchAll, reusedPost, clearReusedPost }) => {
   const [keyword, setKeyword] = useState('');
   const [engine, setEngine] = useState('gemini');
   const [generated, setGenerated] = useState(null);
@@ -185,6 +266,41 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
       setSelectedAccountId(accounts[0].id.toString());
     }
   }, [accounts, selectedAccountId]);
+
+  // 로컬 이미지 업로드 처리 (초안 영역용)
+  const handleImageUpload = async (e, setUrlCallback) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('이미지 크기는 5MB 이하여야 합니다.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const res = await apiFetch('/api/upload', {
+          method: 'POST',
+          body: JSON.stringify({
+            fileName: file.name,
+            base64Data: reader.result
+          })
+        });
+        if (res.success && res.url) {
+          setUrlCallback(res.url);
+        } else {
+          alert('이미지 업로드 실패: ' + (res.error || '알 수 없는 오류'));
+        }
+      } catch (err) {
+        alert('업로드 오류: ' + err.message);
+      }
+    };
+    reader.onerror = () => {
+      alert('파일 읽기 오류가 발생했습니다.');
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleGenerate = async () => {
     if (!keyword.trim()) return alert('키워드를 입력하세요.');
@@ -299,7 +415,12 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
         </div>
       </Card>
 
-      <ManualComposeCard accounts={accounts} fetchAll={fetchAll} />
+      <ManualComposeCard 
+        accounts={accounts} 
+        fetchAll={fetchAll} 
+        reusedPost={reusedPost}
+        clearReusedPost={clearReusedPost}
+      />
 
       {generated && (
         <Card className="animate-in slide-in-from-bottom-4 duration-500">
@@ -312,7 +433,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
               </div>
             )}
           </div>
-          <div className="bg-base-100 p-6 rounded-2xl border border-base-300 shadow-inner">
+          <div className="bg-base-100 p-6 rounded-2xl border border-base-300 shadow-inner space-y-6">
             <Input
               label="포스트 제목"
               className="font-bold text-lg"
@@ -326,6 +447,43 @@ const GenerateTab = React.memo(({ accounts, fetchAll }) => {
               value={generated.content}
               onChange={e => setGenerated(prev => ({ ...prev, content: e.target.value }))}
             />
+
+            <div className="form-control">
+              <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                📸 블로그 본문 맨 위에 박아둘 사진 (직접 업로드 또는 URL 입력)
+              </label>
+              <div className="flex gap-3 items-center">
+                <input
+                  type="text"
+                  className="input input-bordered flex-1 bg-base-100 placeholder-base-content/30 focus:border-primary shadow-inner"
+                  placeholder="https://... 또는 직접 파일 업로드"
+                  value={generated.imageUrl || ''}
+                  onChange={e => setGenerated(prev => ({ ...prev, imageUrl: e.target.value }))}
+                />
+                <label className="btn btn-neutral hover:scale-[1.02] transition-transform cursor-pointer gap-2">
+                  ➕ 사진 선택
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleImageUpload(e, (url) => setGenerated(prev => ({ ...prev, imageUrl: url })))}
+                  />
+                </label>
+              </div>
+              {generated.imageUrl && (
+                <div className="mt-4 relative group w-full max-w-sm rounded-xl overflow-hidden border border-base-300 shadow-md">
+                  <img src={generated.imageUrl} alt="Preview" className="w-full h-auto object-cover max-h-48" />
+                  <button 
+                    type="button"
+                    onClick={() => setGenerated(prev => ({ ...prev, imageUrl: '' }))}
+                    className="absolute top-2 right-2 btn btn-circle btn-xs btn-error shadow hover:scale-105"
+                    title="이미지 제거"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="mt-8 p-6 bg-base-300/40 border border-base-300 rounded-2xl flex flex-col lg:flex-row gap-6 lg:items-end">

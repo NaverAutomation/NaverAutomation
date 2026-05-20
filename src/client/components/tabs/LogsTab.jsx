@@ -10,10 +10,6 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
     apiFetch('/api/logs').then(setDbLogs).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'instant' });
-  }, [realtimeLogs]);
-
   const handleClearLogs = async () => {
     if (!confirm('경고: 모든 로그 기록을 데이터베이스에서 영구 삭제하시겠습니까?')) return;
     try {
@@ -25,7 +21,8 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
     }
   };
 
-  const allLogs = [...dbLogs, ...realtimeLogs].slice(-300);
+  // 최신 로그가 상단에 오도록 배열을 합친 뒤 뒤집습니다.
+  const allLogs = [...dbLogs, ...realtimeLogs].slice(-300).reverse();
 
   const levelStyles = {
     error:   'text-error border-error/50 bg-error/10',

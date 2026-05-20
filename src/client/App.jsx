@@ -52,6 +52,7 @@ const TABS = [
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [reusedPost, setReusedPost] = useState(null);
   const [taskStatus, setTaskStatus] = useState({ isRunning: false, activeWorkers: 0, maxWorkers: 3 });
   const [realtimeLogs, setRealtimeLogs] = useState([]);
   const [accounts, setAccounts] = useState([]);
@@ -308,73 +309,63 @@ const App = () => {
       {/* ── Content (Rule: rendering-conditional-render) */}
       <main className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex-1">
         <div className="animate-in fade-in duration-300">
-          <TabContent 
-            activeTab={activeTab}
-            accounts={accounts}
-            posts={posts}
-            scheduledPosts={scheduledPosts}
-            taskStatus={taskStatus}
-            realtimeLogs={realtimeLogs}
-            settings={settings}
-            setSettings={setSettings}
-            appVersion={appVersion}
-            latestVersion={latestVersion}
-            isCheckingUpdate={isCheckingUpdate}
-            fetchAll={fetchAll}
-            handleManualUpdateCheck={handleManualUpdateCheck}
-            setRealtimeLogs={setRealtimeLogs}
-          />
+          <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
+            <DashboardTab 
+              accounts={accounts} 
+              posts={posts} 
+              scheduledPosts={scheduledPosts} 
+              taskStatus={taskStatus} 
+              realtimeLogs={realtimeLogs} 
+              fetchAll={fetchAll} 
+            />
+          </div>
+          <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
+            <SettingsTab 
+              settings={settings} 
+              setSettings={setSettings} 
+              fetchAll={fetchAll}
+              appVersion={appVersion}
+              latestVersion={latestVersion}
+              onManualUpdateCheck={handleManualUpdateCheck}
+              isCheckingUpdate={isCheckingUpdate}
+            />
+          </div>
+          <div style={{ display: activeTab === 'accounts' ? 'block' : 'none' }}>
+            <AccountsTab accounts={accounts} fetchAll={fetchAll} />
+          </div>
+          <div style={{ display: activeTab === 'campaigns' ? 'block' : 'none' }}>
+            <CampaignsTab campaigns={campaigns} fetchAll={fetchAll} />
+          </div>
+          <div style={{ display: activeTab === 'generate' ? 'block' : 'none' }}>
+            <GenerateTab 
+              accounts={accounts} 
+              fetchAll={fetchAll} 
+              reusedPost={reusedPost}
+              clearReusedPost={() => setReusedPost(null)}
+            />
+          </div>
+          <div style={{ display: activeTab === 'edit' ? 'block' : 'none' }}>
+            <EditTab />
+          </div>
+          <div style={{ display: activeTab === 'scheduled' ? 'block' : 'none' }}>
+            <ScheduledTab 
+              scheduledPosts={scheduledPosts} 
+              posts={posts}
+              accounts={accounts} 
+              fetchAll={fetchAll} 
+              onReusePost={(post) => {
+                setReusedPost(post);
+                setActiveTab('generate');
+              }}
+            />
+          </div>
+          <div style={{ display: activeTab === 'logs' ? 'block' : 'none' }}>
+            <LogsTab realtimeLogs={realtimeLogs} setRealtimeLogs={setRealtimeLogs} />
+          </div>
         </div>
       </main>
     </div>
   );
 };
-
-// ── TabContent Component (Memoized to prevent unnecessary re-renders)
-const TabContent = React.memo(({ 
-  activeTab, accounts, posts, scheduledPosts, taskStatus, realtimeLogs, 
-  settings, setSettings, appVersion, latestVersion, isCheckingUpdate, 
-  fetchAll, handleManualUpdateCheck, setRealtimeLogs 
-}) => {
-  switch (activeTab) {
-    case 'dashboard':
-      return (
-        <DashboardTab 
-          accounts={accounts} 
-          posts={posts} 
-          scheduledPosts={scheduledPosts} 
-          taskStatus={taskStatus} 
-          realtimeLogs={realtimeLogs} 
-          fetchAll={fetchAll} 
-        />
-      );
-    case 'settings':
-      return (
-        <SettingsTab 
-          settings={settings} 
-          setSettings={setSettings} 
-          fetchAll={fetchAll}
-          appVersion={appVersion}
-          latestVersion={latestVersion}
-          onManualUpdateCheck={handleManualUpdateCheck}
-          isCheckingUpdate={isCheckingUpdate}
-        />
-      );
-    case 'accounts':
-      return <AccountsTab accounts={accounts} fetchAll={fetchAll} />;
-    case 'campaigns':
-      return <CampaignsTab campaigns={campaigns} fetchAll={fetchAll} />;
-    case 'generate':
-      return <GenerateTab accounts={accounts} fetchAll={fetchAll} />;
-    case 'edit':
-      return <EditTab />;
-    case 'scheduled':
-      return <ScheduledTab scheduledPosts={scheduledPosts} accounts={accounts} fetchAll={fetchAll} />;
-    case 'logs':
-      return <LogsTab realtimeLogs={realtimeLogs} setRealtimeLogs={setRealtimeLogs} />;
-    default:
-      return null;
-  }
-});
 
 export default App;

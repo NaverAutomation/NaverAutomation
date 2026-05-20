@@ -46,6 +46,17 @@ export async function getUserSecret(userId, key, token) {
  * @param {string} [token] - Optional user token to access RLS protected data
  * @returns {Promise<string|null>}
  */
+// ── 글로벌 설정 인메모리 캐시 (스케줄러 등 토큰 없는 환경에서 재사용)
+const globalSettingCache = new Map();
+
+export function setGlobalSettingCache(key, value) {
+  globalSettingCache.set(key, value);
+}
+
+export function getCachedGlobalSetting(key) {
+  return globalSettingCache.get(key) || null;
+}
+
 export async function getGlobalSetting(key, token) {
   const client = token ? getAuthenticatedClient(token) : supabase;
   const { data, error } = await client
@@ -60,5 +71,11 @@ export async function getGlobalSetting(key, token) {
     }
     return null;
   }
-  return data ? data.value : null;
+
+  const value = data ? data.value : null;
+  // 성공 시 캐시에 자동 저장 (스케줄러 등 토큰 없는 환경에서 재사용)
+  if (value) {
+    globalSettingCache.set(key, value);
+  }
+  return value;
 }

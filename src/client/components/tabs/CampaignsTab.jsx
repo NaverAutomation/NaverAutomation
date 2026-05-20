@@ -5,6 +5,41 @@ const CampaignsTab = React.memo(({ campaigns, fetchAll }) => {
   const [newCampaign, setNewCampaign] = useState({ title: '', content: '', image_url: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 로컬 이미지 업로드 처리
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('이미지 크기는 5MB 이하여야 합니다.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const res = await apiFetch('/api/upload', {
+          method: 'POST',
+          body: JSON.stringify({
+            fileName: file.name,
+            base64Data: reader.result
+          })
+        });
+        if (res.success && res.url) {
+          setNewCampaign(prev => ({ ...prev, image_url: res.url }));
+        } else {
+          alert('이미지 업로드 실패: ' + (res.error || '알 수 없는 오류'));
+        }
+      } catch (err) {
+        alert('업로드 오류: ' + err.message);
+      }
+    };
+    reader.onerror = () => {
+      alert('파일 읽기 오류가 발생했습니다.');
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleAddCampaign = async (e) => {
     e.preventDefault();
     if (!newCampaign.title || !newCampaign.content) return;
@@ -16,7 +51,8 @@ const CampaignsTab = React.memo(({ campaigns, fetchAll }) => {
         body: JSON.stringify(newCampaign),
       });
       setNewCampaign({ title: '', content: '', image_url: '' });
-      fetchAll();
+      await fetchAll();
+      alert('✅ 캠페인이 성공적으로 등록되었습니다! 스케줄러를 시작하면 자동 발행이 시작됩니다.');
     } catch (err) {
       alert('캠페인 추가 실패: ' + err.message);
     } finally {
@@ -66,7 +102,7 @@ const CampaignsTab = React.memo(({ campaigns, fetchAll }) => {
               <input
                 type="text"
                 className="input input-bordered input-lg w-full focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-inner"
-                placeholder="예: 최신 트릭컬 리바이브 티어표 및 공략 가이드"
+                placeholder="예: 2026년 인공지능 기술 트렌드 및 향후 전망"
                 value={newCampaign.title}
                 onChange={(e) => setNewCampaign(prev => ({ ...prev, title: e.target.value }))}
               />
@@ -83,14 +119,38 @@ const CampaignsTab = React.memo(({ campaigns, fetchAll }) => {
             </div>
 
             <div className="form-control">
-              <label className="label font-bold text-base-content/80">원본 이미지 URL (필수 아님)</label>
-              <input
-                type="text"
-                className="input input-bordered w-full focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-inner"
-                placeholder="https://..."
-                value={newCampaign.image_url}
-                onChange={(e) => setNewCampaign(prev => ({ ...prev, image_url: e.target.value }))}
-              />
+              <label className="label font-bold text-base-content/80">원본 이미지 (직접 업로드 또는 URL 입력)</label>
+              <div className="flex gap-3 items-center">
+                <input
+                  type="text"
+                  className="input input-bordered flex-1 w-full focus:ring-2 focus:ring-primary focus:border-primary transition-all shadow-inner"
+                  placeholder="https://... 또는 직접 파일 업로드"
+                  value={newCampaign.image_url || ''}
+                  onChange={(e) => setNewCampaign(prev => ({ ...prev, image_url: e.target.value }))}
+                />
+                <label className="btn btn-neutral hover:scale-[1.02] transition-transform cursor-pointer gap-2">
+                  ➕ 사진 선택
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleImageUpload(e)}
+                  />
+                </label>
+              </div>
+              {newCampaign.image_url && (
+                <div className="mt-4 relative group w-full max-w-sm rounded-xl overflow-hidden border border-base-300 shadow-md">
+                  <img src={newCampaign.image_url} alt="Preview" className="w-full h-auto object-cover max-h-48" />
+                  <button 
+                    type="button"
+                    onClick={() => setNewCampaign(prev => ({ ...prev, image_url: '' }))}
+                    className="absolute top-2 right-2 btn btn-circle btn-xs btn-error shadow hover:scale-105"
+                    title="이미지 제거"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
             </div>
 
             <button 

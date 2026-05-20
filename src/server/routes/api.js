@@ -6,6 +6,12 @@ import { postToNaver } from '../services/naver-service.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
 import { startScheduler, stopScheduler, getSchedulerStatus, processScheduledPosts, emitLog } from '../services/scheduler.js';
 import { getGlobalSetting } from '../utils/supabase.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
@@ -242,7 +248,7 @@ router.post('/campaigns', (req, res) => {
   if (!title || !content) return res.status(400).json({ error: '제목과 본문은 필수입니다.' });
 
   db.run(
-    'INSERT INTO campaigns (user_id, title, content, image_url) VALUES (?, ?, ?)',
+    'INSERT INTO campaigns (user_id, title, content, image_url) VALUES (?, ?, ?, ?)',
     [req.user.id, title, content, image_url || null],
     function(err) {
       if (err) return res.status(500).json({ error: err.message });
@@ -390,7 +396,17 @@ router.post('/post', async (req, res) => {
 // ─────────────────────────────────────────────
 
 // POST /task/start
-router.post('/task/start', (req, res) => {
+router.post('/task/start', async (req, res) => {
+  // 스케줄러 시작 전, 유저 토큰으로 Gemini API 키를 선제적으로 캐시
+  try {
+    const masterKey = await getGlobalSetting('master_gemini_api_key', req.token);
+    if (masterKey) {
+      console.log('[Task/Start] Gemini API key prefetched and cached successfully.');
+    }
+  } catch (e) {
+    console.warn('[Task/Start] Failed to prefetch Gemini API key:', e.message);
+  }
+
   const result = startScheduler();
   res.json({ success: result, status: getSchedulerStatus() });
 });
@@ -425,6 +441,37 @@ router.delete('/logs', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ success: true });
   });
+});
+
+// POST /upload (로컬 base64 이미지 업로드)
+router.post('/upload', (req, res) => {
+  const { fileName, base64Data } = req.body;
+  if (!fileName || !base64Data) {
+    return res.status(400).json({ error: '파일명과 base64 데이터가 필요합니다.' });
+  }
+
+  try {
+    const uploadDir = path.join(__dirname, '../../../uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // data:image/png;base64,... 헤더 제거
+    const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+    const fileBuffer = Buffer.from(cleanBase64, 'base64');
+    
+    const fileExt = path.extname(fileName) || '.png';
+    const safeFileName = `${Date.now()}_img${fileExt}`;
+    const filePath = path.join(uploadDir, safeFileName);
+
+    fs.writeFileSync(filePath, fileBuffer);
+
+    // 호스트에 따른 정적 서빙 URL 생성
+    const fileUrl = `http://${req.headers.host}/uploads/${safeFileName}`;
+    res.json({ success: true, url: fileUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 export default router;
