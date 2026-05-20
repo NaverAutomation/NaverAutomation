@@ -33,7 +33,7 @@ const distPath = path.join(__dirname, '../../dist');
 app.use(express.static(distPath));
 
 // Serve uploaded images static folder
-app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
+app.use('/uploads', express.static(CONFIG.UPLOAD_DIR));
 
 // Fallback for SPA (Express 5 fix using Regex)
 app.get(/.*/, (req, res, next) => {

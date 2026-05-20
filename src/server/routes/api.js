@@ -451,7 +451,7 @@ router.post('/upload', (req, res) => {
   }
 
   try {
-    const uploadDir = path.join(__dirname, '../../../uploads');
+    const uploadDir = CONFIG.UPLOAD_DIR;
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }

@@ -19,6 +19,7 @@ try {
 export const CONFIG = {
   PORT: process.env.PORT || 3000,
   DB_PATH: path.join(userDataPath, 'naver-auto.db'),
+  UPLOAD_DIR: path.join(userDataPath, 'uploads'),
   SECRET_KEY: process.env.SECRET_KEY || 'default-secret-key',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   HEADLESS: process.env.HEADLESS !== 'false',
