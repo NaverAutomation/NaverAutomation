@@ -91,9 +91,10 @@ const CampaignsTab = React.memo(({ campaigns, fetchAll }) => {
           <h2 className="card-title text-2xl font-bold flex items-center gap-2 mb-4 text-primary">
             🎯 24시간 자동화 캠페인 등록
           </h2>
-          <p className="text-sm text-base-content/70 mb-6 bg-base-300 p-4 rounded-lg font-medium border-l-4 border-primary">
+          <p className="text-sm text-base-content/70 mb-6 bg-base-300 p-4 rounded-lg font-medium border-l-4 border-primary leading-relaxed">
             이곳에 입력한 <strong>원본 제목과 본문</strong>은 AI가 매번 새로운 내용으로 재작성하여 발행합니다.<br/>
-            사진은 원본 그대로 사용되며, 활성화된 모든 계정으로 순차적으로 발행됩니다. (계정당 1일 3회 제한)
+            사진은 원본 그대로 사용되며, 활성화된 모든 계정으로 순차적으로 발행됩니다. (계정당 1일 3회 제한)<br/>
+            <span className="text-warning font-bold text-xs mt-1 block">⚠️ 24시간 자동화 캠페인은 정적 예약 목록(대기열)에 등록되지 않고, 백그라운드 엔진에 의해 실시간으로 자동 생성 및 송출됩니다.</span>
           </p>
           
           <form onSubmit={handleAddCampaign} className="space-y-6">
@@ -158,7 +159,7 @@ const CampaignsTab = React.memo(({ campaigns, fetchAll }) => {
               className={`btn btn-primary btn-lg w-full font-black text-lg gap-2 shadow-lg transition-all hover:scale-[1.01] ${isSubmitting ? 'loading' : ''}`}
               disabled={isSubmitting}
             >
-              🚀 캠페인 등록 및 자동화 대기열 추가
+              🚀 캠페인 등록 및 24시간 자동화 시작
             </button>
           </form>
         </div>

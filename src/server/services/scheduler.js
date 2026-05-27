@@ -57,7 +57,7 @@ function emitTaskStatus() {
 /**
  * 유저별 사용 가능한 계정 조회 (1일 3회 한도 체크 포함)
  */
-async function getAvailableAccount(userId) {
+export async function getAvailableAccount(userId) {
   const today = new Date().toISOString().split('T')[0];
   
   return new Promise((resolve, reject) => {
@@ -238,7 +238,7 @@ export async function processScheduledPosts() {
   if (activeWorkers >= MAX_WORKERS) return;
 
   db.all(
-    "SELECT * FROM posts WHERE status IN ('scheduled', 'pending') AND (scheduled_at IS NULL OR scheduled_at <= datetime('now', 'localtime'))",
+    "SELECT * FROM posts WHERE status IN ('scheduled', 'pending') AND (scheduled_at IS NULL OR datetime(scheduled_at) <= datetime('now'))",
     [],
     async (err, posts) => {
       if (err) {

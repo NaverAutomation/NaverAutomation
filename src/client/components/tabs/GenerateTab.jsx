@@ -75,31 +75,19 @@ const ManualComposeCard = React.memo(({ accounts, fetchAll, reusedPost, clearReu
 
     setManualPosting(true);
     try {
-      const accId = manualUseRoundRobin ? null : manualSelectedAccountId;
       const payload = {
         title: manualTitle,
         content: manualContent,
         image_url: manualImageUrl.trim() || null,
         headless: manualHeadless,
+        account_id: manualUseRoundRobin ? null : manualSelectedAccountId,
       };
 
-      if (accId) {
-        const data = await apiFetch('/api/post', {
-          method: 'POST',
-          body: JSON.stringify({
-            ...payload,
-            account_id: accId,
-          }),
-        });
-        alert(data.message || '발행 완료!');
-      } else {
-        await apiFetch('/api/posts/schedule', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        alert('라운드로빈 큐에 추가되었습니다. 스케줄러를 시작하면 자동 발행됩니다.');
-      }
-
+      const data = await apiFetch('/api/post', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      alert(data.message || '발행 완료!');
       await fetchAll();
     } catch (err) {
       alert('수기 발행 실패: ' + err.message);
@@ -322,33 +310,19 @@ const GenerateTab = React.memo(({ accounts, fetchAll, reusedPost, clearReusedPos
     if (!useRoundRobin && !selectedAccountId) return alert('계정을 선택하세요.');
     setPosting(true);
     try {
-      const accId = useRoundRobin ? null : selectedAccountId;
-      if (accId) {
-        // 즉시 발행
-        const data = await apiFetch('/api/post', {
-          method: 'POST',
-          body: JSON.stringify({
-            account_id: accId,
-            title: generated.title,
-            content: generated.content,
-            image_url: generated.imageUrl,
-            headless,
-          }),
-        });
-        alert(data.message || '발행 완료!');
-      } else {
-        // 라운드로빈 큐에 추가
-        await apiFetch('/api/posts/schedule', {
-          method: 'POST',
-          body: JSON.stringify({
-            title: generated.title,
-            content: generated.content,
-            image_url: generated.imageUrl,
-            headless,
-          }),
-        });
-        alert('라운드로빈 큐에 추가되었습니다. 스케줄러를 시작하면 자동 발행됩니다.');
-      }
+      const payload = {
+        title: generated.title,
+        content: generated.content,
+        image_url: generated.imageUrl || null,
+        headless,
+        account_id: useRoundRobin ? null : selectedAccountId,
+      };
+
+      const data = await apiFetch('/api/post', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      alert(data.message || '발행 완료!');
       await fetchAll();
     } catch (err) {
       alert('발행 실패: ' + err.message);
@@ -372,7 +346,7 @@ const GenerateTab = React.memo(({ accounts, fetchAll, reusedPost, clearReusedPos
           scheduled_at: new Date(scheduledAt).toISOString(),
         }),
       });
-      alert(data.message);
+      alert(data.message || '예약 완료되었습니다!');
       await fetchAll();
     } catch (err) {
       alert('예약 실패: ' + err.message);

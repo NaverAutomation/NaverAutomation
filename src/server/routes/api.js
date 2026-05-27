@@ -4,7 +4,7 @@ import { CONFIG } from '../config.js';
 import { generateContent } from '../services/ai-service.js';
 import { postToNaver } from '../services/naver-service.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
-import { startScheduler, stopScheduler, getSchedulerStatus, processScheduledPosts, emitLog } from '../services/scheduler.js';
+import { startScheduler, stopScheduler, getSchedulerStatus, processScheduledPosts, emitLog, getAvailableAccount } from '../services/scheduler.js';
 import { getGlobalSetting } from '../utils/supabase.js';
 import fs from 'fs';
 import path from 'path';
@@ -310,6 +310,7 @@ router.post('/posts/:id/retry', (req, res) => {
     function(err) {
       if (err) return res.status(500).json({ error: err.message });
       if (this.changes === 0) return res.status(404).json({ error: '실패 상태인 포스트를 찾을 수 없거나 이미 처리되었습니다.' });
+      processScheduledPosts();
       res.json({ success: true, message: '포스트가 예약 목록으로 이동되었습니다.' });
     }
   );
@@ -353,42 +354,53 @@ router.post('/posts/:id/publish-now', (req, res) => {
 // POST /post (즉시 발행)
 router.post('/post', async (req, res) => {
   const { account_id, title, content, image_url, headless } = req.body;
-  if (!account_id || !title || !content) {
-    return res.status(400).json({ error: 'account_id, title, content는 필수입니다.' });
+  if (!title || !content) {
+    return res.status(400).json({ error: '제목과 본문은 필수입니다.' });
   }
 
-  db.get('SELECT * FROM accounts WHERE id = ? AND user_id = ?', [account_id, req.user.id], async (err, account) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!account) return res.status(404).json({ error: '계정을 찾을 수 없습니다.' });
-
-    try {
-      emitLog('info', `[수기 발행] 계정 ${account.naver_id}로 포스팅을 시작합니다.`, req.user.id);
-      const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
-      const result = await postToNaver(decryptedAccount, { title, content, image_url }, { headless });
-
-      const status = result.success ? 'published' : 'failed';
-      db.run(
-        'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [req.user.id, account_id, title, content, image_url || null, headless ? 1 : 0, status]
-      );
-      
-      if (result.success) {
-        // 성공 시 계정 카운트 및 순서 업데이트
-        db.run(
-          "UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?",
-          [new Date().toISOString().split('T')[0], account.id]
-        );
-        emitLog('success', `[수기 발행] 성공적으로 포스팅되었습니다: ${title}`, req.user.id);
-      } else {
-        emitLog('error', `[수기 발행] 포스팅 실패: ${result.message}`, req.user.id);
-      }
-
-      res.json(result);
-    } catch (error) {
-      emitLog('error', `[수기 발행] 작업 중 오류 발생: ${error.message}`, req.user.id);
-      res.status(500).json({ error: error.message });
+  try {
+    let account = null;
+    if (account_id) {
+      account = await new Promise((resolve, reject) => {
+        db.get('SELECT * FROM accounts WHERE id = ? AND user_id = ?', [account_id, req.user.id], (err, row) => {
+          if (err) return reject(err);
+          resolve(row || null);
+        });
+      });
+    } else {
+      account = await getAvailableAccount(req.user.id);
     }
-  });
+
+    if (!account) {
+      return res.status(404).json({ error: '사용 가능한 네이버 계정을 찾을 수 없습니다.' });
+    }
+
+    emitLog('info', `[수기 발행] 계정 ${account.naver_id}로 포스팅을 시작합니다.`, req.user.id);
+    const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
+    const result = await postToNaver(decryptedAccount, { title, content, image_url }, { headless });
+
+    const status = result.success ? 'published' : 'failed';
+    db.run(
+      'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.user.id, account.id, title, content, image_url || null, headless ? 1 : 0, status]
+    );
+    
+    if (result.success) {
+      // 성공 시 계정 카운트 및 순서 업데이트
+      db.run(
+        "UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?",
+        [new Date().toISOString().split('T')[0], account.id]
+      );
+      emitLog('success', `[수기 발행] 성공적으로 포스팅되었습니다: ${title}`, req.user.id);
+    } else {
+      emitLog('error', `[수기 발행] 포스팅 실패: ${result.message}`, req.user.id);
+    }
+
+    res.json(result);
+  } catch (error) {
+    emitLog('error', `[수기 발행] 작업 중 오류 발생: ${error.message}`, req.user.id);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ─────────────────────────────────────────────

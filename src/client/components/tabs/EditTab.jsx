@@ -5,7 +5,7 @@ import { Card, SectionTitle, Input, Btn, Textarea } from '../common';
 const EditTab = React.memo(() => {
   const [original, setOriginal] = useState('');
   const [instruction, setInstruction] = useState('블로그 글을 더 자연스럽고 SEO에 최적화된 형태로 다듬어주세요. 소제목을 추가하고 가독성을 높여주세요.');
-  const [engine, setEngine] = useState('openai');
+  const [engine, setEngine] = useState('gemini');
   const [edited, setEdited] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -54,8 +54,7 @@ const EditTab = React.memo(() => {
               onChange={e => setEngine(e.target.value)}
               className="select select-bordered bg-base-100 font-semibold shadow-sm w-full sm:w-auto"
             >
-              <option value="openai">🤖 GPT-4o (권장)</option>
-              <option value="gemini">✨ 클라우드 AI API</option>
+              <option value="gemini">✨ 클라우드 AI API (Gemini)</option>
               {import.meta.env.DEV && <option value="ollama">🦙 Ollama</option>}
             </select>
             <Btn variant="primary" onClick={handleEdit} disabled={loading} className="flex-1">
