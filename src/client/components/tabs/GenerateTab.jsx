@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../../utils/api';
 import { Btn, Card, Input, SectionTitle, StatusBadge, Textarea } from '../common';
 
@@ -27,6 +27,14 @@ const GenerateTab = React.memo(
     const [scheduledAt, setScheduledAt] = useState('');
     const [useRoundRobin, setUseRoundRobin] = useState(true);
     const [headless, setHeadless] = useState(true);
+    const [aiMode, setAiMode] = useState('generate'); // 'generate' | 'edit'
+    const [editContent, setEditContent] = useState('');
+    const [editInstruction, setEditInstruction] = useState(
+      '블로그 글을 더 자연스럽고 SEO에 최적화된 형태로 다듬어주세요.',
+    );
+    const [editing, setEditing] = useState(false);
+    const [randomOffset, setRandomOffset] = useState(30); // ±분
+    const [useRandomOffset, setUseRandomOffset] = useState(false);
 
     // ── 수기 작성 발행 상태 ──
     const [manualTitle, setManualTitle] = useState('');
@@ -38,6 +46,13 @@ const GenerateTab = React.memo(
     const [manualScheduledAt, setManualScheduledAt] = useState('');
     const [manualUseRoundRobin, setManualUseRoundRobin] = useState(true);
     const [manualHeadless, setManualHeadless] = useState(true);
+    const [manualRandomOffset, setManualRandomOffset] = useState(30);
+    const [manualUseRandomOffset, setManualUseRandomOffset] = useState(false);
+
+    // ── 이미지 파일 input refs ──
+    const manualImageInputRef = useRef(null);
+    const generatedImageInputRef = useRef(null);
+    const campaignImageInputRef = useRef(null);
 
     // ── 작업대상 포스트(캠페인) 등록 상태 ──
     const [newCampaign, setNewCampaign] = useState({ title: '', content: '', image_url: '' });
@@ -155,12 +170,20 @@ const GenerateTab = React.memo(
       setPosting(false);
     };
 
+    // ── 랜덤 오프셋 적용 헬퍼 ──
+    const applyRandomOffset = (isoString, offsetMin) => {
+      const offsetMs = (Math.random() * 2 - 1) * offsetMin * 60 * 1000;
+      return new Date(new Date(isoString).getTime() + offsetMs).toISOString();
+    };
+
     // ── AI 초안 타이머 예약 ──
     const handleSchedule = async () => {
       if (!generated || !scheduledAt) return alert('예약 시간을 설정하세요.');
       setScheduling(true);
       try {
         const accId = useRoundRobin ? null : selectedAccountId;
+        const rawTime = new Date(scheduledAt).toISOString();
+        const finalTime = useRandomOffset ? applyRandomOffset(rawTime, randomOffset) : rawTime;
         const data = await apiFetch('/api/posts/schedule', {
           method: 'POST',
           body: JSON.stringify({
@@ -169,10 +192,13 @@ const GenerateTab = React.memo(
             content: generated.content,
             image_url: generated.imageUrl,
             headless,
-            scheduled_at: new Date(scheduledAt).toISOString(),
+            scheduled_at: finalTime,
           }),
         });
-        alert(data.message || '예약 완료되었습니다!');
+        alert(
+          data.message ||
+            `예약 완료! 실제 발행 시간: ${new Date(finalTime).toLocaleString('ko-KR')}`,
+        );
         setGenerated(null);
         setKeyword('');
         setScheduledAt('');
@@ -181,6 +207,30 @@ const GenerateTab = React.memo(
         alert(`예약 실패: ${err.message}`);
       }
       setScheduling(false);
+    };
+
+    // ── AI 기존 글 수정 ──
+    const handleEdit = async () => {
+      if (!editContent.trim()) return alert('수정할 글을 입력하세요.');
+      setEditing(true);
+      try {
+        const data = await apiFetch('/api/generate/edit', {
+          method: 'POST',
+          body: JSON.stringify({ content: editContent, instruction: editInstruction }),
+        });
+        setGenerated({
+          title: '',
+          content: data.editedContent,
+          imageUrl: '',
+        });
+        setTimeout(() => {
+          const draftContainer = document.getElementById('generated-draft-card');
+          if (draftContainer) draftContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+      } catch (err) {
+        alert(`수정 실패: ${err.message}`);
+      }
+      setEditing(false);
     };
 
     // ── 수기 즉시 송출 ──
@@ -221,6 +271,10 @@ const GenerateTab = React.memo(
       setManualScheduling(true);
       try {
         const accId = manualUseRoundRobin ? null : manualSelectedAccountId;
+        const rawTime = new Date(manualScheduledAt).toISOString();
+        const finalTime = manualUseRandomOffset
+          ? applyRandomOffset(rawTime, manualRandomOffset)
+          : rawTime;
         const data = await apiFetch('/api/posts/schedule', {
           method: 'POST',
           body: JSON.stringify({
@@ -229,10 +283,13 @@ const GenerateTab = React.memo(
             content: manualContent,
             image_url: manualImageUrl.trim() || null,
             headless: manualHeadless,
-            scheduled_at: new Date(manualScheduledAt).toISOString(),
+            scheduled_at: finalTime,
           }),
         });
-        alert(data.message || '예약 완료!');
+        alert(
+          data.message ||
+            `예약 완료! 실제 발행 시간: ${new Date(finalTime).toLocaleString('ko-KR')}`,
+        );
         setManualTitle('');
         setManualContent('');
         setManualImageUrl('');
@@ -430,49 +487,122 @@ const GenerateTab = React.memo(
               {activeSubTab === 'ai' ? (
                 /* ── AI 원고 생성기 폼 ── */
                 <div className="space-y-6">
-                  <div className="relative">
-                    <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
-                      어떤 주제로 포스팅할까요?
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl">💡</span>
-                      <input
-                        className="input input-lg input-bordered w-full pl-12 bg-base-100 placeholder-base-content/30 focus:border-primary shadow-inner"
-                        placeholder="예: 2026 성수동 핫플 카페 5곳 정리"
-                        value={keyword}
-                        onChange={(e) => setKeyword(e.target.value)}
-                        onKeyDown={(e) =>
-                          e.key === 'Enter' && !e.nativeEvent.isComposing && handleGenerate()
-                        }
-                      />
-                    </div>
+                  {/* 모드 토글: 새 글 생성 vs 기존 글 수정 */}
+                  <div className="flex bg-base-200 p-1 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setAiMode('generate')}
+                      className={`flex-1 py-2 text-center rounded-md text-sm font-bold transition-all cursor-pointer ${
+                        aiMode === 'generate'
+                          ? 'bg-base-100 text-base-content shadow-sm'
+                          : 'text-base-content/50 hover:text-base-content'
+                      }`}
+                    >
+                      🚀 새 글 생성
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAiMode('edit')}
+                      className={`flex-1 py-2 text-center rounded-md text-sm font-bold transition-all cursor-pointer ${
+                        aiMode === 'edit'
+                          ? 'bg-base-100 text-base-content shadow-sm'
+                          : 'text-base-content/50 hover:text-base-content'
+                      }`}
+                    >
+                      ✏️ 기존 글 수정
+                    </button>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-4 items-end">
-                    <div className="flex-1 w-full">
-                      <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
-                        AI 지능 (엔진)
-                      </label>
-                      <select
-                        value={engine}
-                        onChange={(e) => setEngine(e.target.value)}
-                        className="select select-bordered w-full bg-base-100 font-semibold h-[3rem]"
+                  {aiMode === 'generate' ? (
+                    /* 새 글 생성 */
+                    <>
+                      <div className="relative">
+                        <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                          어떤 주제로 포스팅할까요?
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl">
+                            💡
+                          </span>
+                          <input
+                            className="input input-lg input-bordered w-full pl-12 bg-base-100 placeholder-base-content/30 focus:border-primary shadow-inner"
+                            placeholder="예: 2026 성수동 핫플 카페 5곳 정리"
+                            value={keyword}
+                            onChange={(e) => setKeyword(e.target.value)}
+                            onKeyDown={(e) =>
+                              e.key === 'Enter' && !e.nativeEvent.isComposing && handleGenerate()
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-4 items-end">
+                        <div className="flex-1 w-full">
+                          <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                            AI 지능 (엔진)
+                          </label>
+                          <select
+                            value={engine}
+                            onChange={(e) => setEngine(e.target.value)}
+                            className="select select-bordered w-full bg-base-100 font-semibold h-[3rem]"
+                          >
+                            <option value="gemini">✨ 클라우드 AI API (Gemini)</option>
+                            {import.meta.env.DEV && (
+                              <option value="ollama">🦙 Ollama (로컬무료)</option>
+                            )}
+                          </select>
+                        </div>
+                        <Btn
+                          variant="primary"
+                          className="h-[3rem] w-full sm:w-auto px-8"
+                          onClick={handleGenerate}
+                          disabled={loading}
+                        >
+                          {loading ? (
+                            <span className="loading loading-dots"></span>
+                          ) : (
+                            '🚀 초안 생성'
+                          )}
+                        </Btn>
+                      </div>
+                    </>
+                  ) : (
+                    /* 기존 글 수정 */
+                    <div className="space-y-4">
+                      <div>
+                        <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                          ✏️ 수정할 기존 글을 붙여넣으세요
+                        </label>
+                        <textarea
+                          className="textarea textarea-bordered w-full h-[200px] bg-base-100 font-medium leading-7 placeholder-base-content/30 focus:border-primary shadow-inner"
+                          placeholder="블로그에 올렸거나 작성해둔 글을 여기에 붙여넣으면 AI가 자연스럽게 다듬어 드립니다..."
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                          📝 수정 지시사항 (선택)
+                        </label>
+                        <input
+                          className="input input-bordered w-full bg-base-100 placeholder-base-content/30 focus:border-primary"
+                          value={editInstruction}
+                          onChange={(e) => setEditInstruction(e.target.value)}
+                        />
+                      </div>
+                      <Btn
+                        variant="primary"
+                        className="w-full"
+                        onClick={handleEdit}
+                        disabled={editing}
                       >
-                        <option value="gemini">✨ 클라우드 AI API (Gemini)</option>
-                        {import.meta.env.DEV && (
-                          <option value="ollama">🦙 Ollama (로컬무료)</option>
+                        {editing ? (
+                          <span className="loading loading-dots"></span>
+                        ) : (
+                          '✨ AI로 글 다듬기'
                         )}
-                      </select>
+                      </Btn>
                     </div>
-                    <Btn
-                      variant="primary"
-                      className="h-[3rem] w-full sm:w-auto px-8"
-                      onClick={handleGenerate}
-                      disabled={loading}
-                    >
-                      {loading ? <span className="loading loading-dots"></span> : '🚀 초안 생성'}
-                    </Btn>
-                  </div>
+                  )}
                 </div>
               ) : (
                 /* ── 수기 직접 작성 폼 ── */
@@ -505,15 +635,20 @@ const GenerateTab = React.memo(
                         value={manualImageUrl}
                         onChange={(e) => setManualImageUrl(e.target.value)}
                       />
-                      <label className="btn btn-neutral hover:scale-[1.02] transition-transform cursor-pointer gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-neutral shrink-0"
+                        onClick={() => manualImageInputRef.current?.click()}
+                      >
                         ➕ 사진 선택
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleImageUpload(e, setManualImageUrl)}
-                        />
-                      </label>
+                      </button>
+                      <input
+                        ref={manualImageInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleImageUpload(e, setManualImageUrl)}
+                      />
                     </div>
                     {manualImageUrl && (
                       <div className="mt-4 relative group w-full max-w-sm rounded-xl overflow-hidden border border-base-300 shadow-md">
@@ -578,6 +713,33 @@ const GenerateTab = React.memo(
                           onChange={(e) => setManualScheduledAt(e.target.value)}
                           className="input input-bordered w-full bg-base-100 font-medium"
                         />
+                        <div className="flex items-center gap-2 mt-2">
+                          <input
+                            type="checkbox"
+                            id="manual-random-offset"
+                            className="checkbox checkbox-primary checkbox-sm"
+                            checked={manualUseRandomOffset}
+                            onChange={(e) => setManualUseRandomOffset(e.target.checked)}
+                          />
+                          <label
+                            htmlFor="manual-random-offset"
+                            className="label-text text-xs font-semibold cursor-pointer"
+                          >
+                            ±
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="120"
+                            value={manualRandomOffset}
+                            onChange={(e) => setManualRandomOffset(Number(e.target.value))}
+                            disabled={!manualUseRandomOffset}
+                            className="input input-bordered input-xs w-16 bg-base-100 font-medium"
+                          />
+                          <span className="text-xs text-base-content/50 font-semibold">
+                            분 랜덤
+                          </span>
+                        </div>
                       </div>
                       <div>
                         <label className="label-text font-bold block mb-2 text-base-content/80">
@@ -681,19 +843,24 @@ const GenerateTab = React.memo(
                           setGenerated((prev) => ({ ...prev, imageUrl: e.target.value }))
                         }
                       />
-                      <label className="btn btn-neutral hover:scale-[1.02] transition-transform cursor-pointer gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-neutral shrink-0"
+                        onClick={() => generatedImageInputRef.current?.click()}
+                      >
                         ➕ 사진 선택
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) =>
-                            handleImageUpload(e, (url) =>
-                              setGenerated((prev) => ({ ...prev, imageUrl: url })),
-                            )
-                          }
-                        />
-                      </label>
+                      </button>
+                      <input
+                        ref={generatedImageInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) =>
+                          handleImageUpload(e, (url) =>
+                            setGenerated((prev) => ({ ...prev, imageUrl: url })),
+                          )
+                        }
+                      />
                     </div>
                     {generated.imageUrl && (
                       <div className="mt-4 relative group w-full max-w-sm rounded-xl overflow-hidden border border-base-300 shadow-md">
@@ -759,6 +926,31 @@ const GenerateTab = React.memo(
                         onChange={(e) => setScheduledAt(e.target.value)}
                         className="input input-bordered w-full bg-base-100 font-medium"
                       />
+                      <div className="flex items-center gap-2 mt-2">
+                        <input
+                          type="checkbox"
+                          id="ai-random-offset"
+                          className="checkbox checkbox-primary checkbox-sm"
+                          checked={useRandomOffset}
+                          onChange={(e) => setUseRandomOffset(e.target.checked)}
+                        />
+                        <label
+                          htmlFor="ai-random-offset"
+                          className="label-text text-xs font-semibold cursor-pointer"
+                        >
+                          ±
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="120"
+                          value={randomOffset}
+                          onChange={(e) => setRandomOffset(Number(e.target.value))}
+                          disabled={!useRandomOffset}
+                          className="input input-bordered input-xs w-16 bg-base-100 font-medium"
+                        />
+                        <span className="text-xs text-base-content/50 font-semibold">분 랜덤</span>
+                      </div>
                     </div>
                     <div>
                       <label className="label-text font-bold block mb-2 text-base-content/80">
@@ -892,19 +1084,24 @@ const GenerateTab = React.memo(
                           setNewCampaign((prev) => ({ ...prev, image_url: e.target.value }))
                         }
                       />
-                      <label className="btn btn-neutral btn-sm cursor-pointer text-xs shrink-0">
+                      <button
+                        type="button"
+                        className="btn btn-neutral btn-sm shrink-0"
+                        onClick={() => campaignImageInputRef.current?.click()}
+                      >
                         📸 업로드
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) =>
-                            handleImageUpload(e, (url) =>
-                              setNewCampaign((prev) => ({ ...prev, image_url: url })),
-                            )
-                          }
-                        />
-                      </label>
+                      </button>
+                      <input
+                        ref={campaignImageInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) =>
+                          handleImageUpload(e, (url) =>
+                            setNewCampaign((prev) => ({ ...prev, image_url: url })),
+                          )
+                        }
+                      />
                     </div>
                   </div>
 

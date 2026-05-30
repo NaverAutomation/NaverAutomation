@@ -344,6 +344,21 @@ router.delete('/campaigns/:id', (req, res) => {
 // POSTS
 // ─────────────────────────────────────────────
 
+/**
+ * 유저의 published 발행이력을 최근 10개만 남기고 삭제
+ */
+function cleanupOldPublishedPosts(userId) {
+  db.run(
+    `DELETE FROM posts WHERE user_id = ? AND status = 'published' AND id NOT IN (
+      SELECT id FROM posts WHERE user_id = ? AND status = 'published' ORDER BY id DESC LIMIT 10
+    )`,
+    [userId, userId],
+    (err) => {
+      if (err) console.error('[Cleanup] 발행이력 정리 실패:', err.message);
+    },
+  );
+}
+
 // GET /posts (발행 히스토리)
 router.get('/posts', (req, res) => {
   db.all(
@@ -487,6 +502,7 @@ router.post('/post', async (req, res) => {
         'UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?',
         [new Date().toISOString().split('T')[0], account.id],
       );
+      cleanupOldPublishedPosts(req.user.id);
       emitLog('success', `[수기 발행] 성공적으로 포스팅되었습니다: ${title}`, req.user.id);
     } else {
       emitLog('error', `[수기 발행] 포스팅 실패: ${result.message}`, req.user.id);
