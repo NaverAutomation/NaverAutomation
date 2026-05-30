@@ -1,6 +1,6 @@
 {
   "name": "naver-auto",
-  "version": "0.3.282",
+  "version": "0.3.29",
   "description": "Naver Blog Automation with AI",
   "type": "module",
   "main": "src/main.js",
@@ -23,6 +23,9 @@
     "start": "node src/server/index.js",
     "dev": "vite",
     "build": "vite build",
+    "lint": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check --write .",
     "playwright:install": "playwright install chromium",
     "postinstall": "npm run playwright:install",
     "electron:dev": "cross-env NODE_ENV=development electron .",
@@ -43,6 +46,7 @@
     "sqlite3": "^6.0.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.16",
     "@tailwindcss/postcss": "^4.3.0",
     "@vitejs/plugin-react": "^6.0.2",
     "autoprefixer": "^10.5.0",
