@@ -121,14 +121,37 @@ const GenerateTab = React.memo(
 
     // ── AI 초안 생성 기능 ──
     const handleGenerate = async () => {
-      if (!keyword.trim()) return alert('키워드를 입력하세요.');
+      const trimmed = keyword.trim();
+      if (!trimmed) return alert('주제 또는 수정할 본문을 입력하세요.');
+
+      // 입력한 텍스트가 80자를 넘거나 줄바꿈(\n)이 포함되어 있으면 기존 글 수정 모드로 판정
+      const isLongText = trimmed.length > 80 || trimmed.includes('\n');
+
       setLoading(true);
       try {
-        const data = await apiFetch('/api/generate', {
-          method: 'POST',
-          body: JSON.stringify({ keyword, engine }),
-        });
-        setGenerated(data);
+        if (isLongText) {
+          // 기존 글 수정 API 자동 전환
+          const data = await apiFetch('/api/generate/edit', {
+            method: 'POST',
+            body: JSON.stringify({
+              content: trimmed,
+              instruction: '블로그 글을 더 자연스럽고 SEO에 최적화된 형태로 다듬어주세요.',
+            }),
+          });
+          setGenerated({
+            title: '',
+            content: data.editedContent,
+            imageUrl: '',
+          });
+        } else {
+          // 일반 키워드로 새 글 생성 API
+          const data = await apiFetch('/api/generate', {
+            method: 'POST',
+            body: JSON.stringify({ keyword: trimmed, engine }),
+          });
+          setGenerated(data);
+        }
+
         // 생성 완료 시 스크롤
         setTimeout(() => {
           const draftContainer = document.getElementById('generated-draft-card');
@@ -137,7 +160,7 @@ const GenerateTab = React.memo(
           }
         }, 150);
       } catch (err) {
-        alert(`생성 실패: ${err.message}`);
+        alert(`실패: ${err.message}`);
       }
       setLoading(false);
     };
@@ -526,7 +549,7 @@ const GenerateTab = React.memo(
                           </span>
                           <input
                             className="input input-lg input-bordered w-full pl-12 bg-base-100 placeholder-base-content/30 focus:border-primary shadow-inner"
-                            placeholder="예: 2026 성수동 핫플 카페 5곳 정리"
+                            placeholder="예: 성수동 핫플 카페 5곳 정리 (또는 작성해둔 글을 그대로 붙여넣으세요)"
                             value={keyword}
                             onChange={(e) => setKeyword(e.target.value)}
                             onKeyDown={(e) =>
