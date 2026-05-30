@@ -1,8 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import pkgUpdater from 'electron-updater';
-import fs from 'fs';
 
 const { autoUpdater } = pkgUpdater;
 
@@ -15,7 +15,9 @@ function log(msg) {
   const timestamp = new Date().toISOString();
   const fullMsg = `[${timestamp}] ${msg}\n`;
   console.log(msg);
-  try { fs.appendFileSync(logPath, fullMsg); } catch (e) {}
+  try {
+    fs.appendFileSync(logPath, fullMsg);
+  } catch (_e) {}
 }
 
 // 초기화 전역 에러 핸들러
@@ -46,7 +48,7 @@ async function initBackend() {
   } catch (err) {
     log(`[Main] Backend failed: ${err.message}`);
     log(`[Main] Error Stack: ${err.stack}`);
-    dialog.showErrorBox('서버 시작 실패', '백엔드 서버를 시작하지 못했습니다: ' + err.message);
+    dialog.showErrorBox('서버 시작 실패', `백엔드 서버를 시작하지 못했습니다: ${err.message}`);
   }
 }
 
@@ -61,7 +63,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       devTools: !app.isPackaged,
     },
-    icon: path.join(__dirname, '../assets/icon.png')
+    icon: path.join(__dirname, '../assets/icon.png'),
   });
 
   const targetURL = `http://localhost:${serverPort}`;
@@ -84,8 +86,9 @@ function createWindow() {
         dialog.showMessageBox({
           type: 'error',
           title: '페이지 로드 실패',
-          message: '서버와 연결할 수 없습니다. 로그 파일을 확인하거나 개발자 도구의 에러 메시지를 확인해 주세요.',
-          buttons: ['확인']
+          message:
+            '서버와 연결할 수 없습니다. 로그 파일을 확인하거나 개발자 도구의 에러 메시지를 확인해 주세요.',
+          buttons: ['확인'],
         });
       }
     });
@@ -108,7 +111,7 @@ function sendUpdaterStatus(status, message, extra = {}) {
 
   log(`[Auto-Updater Status] ${message}`);
 
-  if (mainWindow && mainWindow.webContents) {
+  if (mainWindow?.webContents) {
     mainWindow.webContents.send('updater:status', lastUpdaterStatus);
   }
 }
@@ -175,7 +178,7 @@ function setupAutoUpdater() {
       type: 'info',
       title: '새로운 업데이트',
       message: `새로운 버전(${info.version})이 출시되었습니다. 자동으로 다운로드를 시작합니다.`,
-      buttons: ['확인']
+      buttons: ['확인'],
     });
   });
 
@@ -203,18 +206,20 @@ function setupAutoUpdater() {
     sendUpdaterStatus('update-downloaded', '다운로드 완료. 설치 준비 중...', {
       downloadedVersion: info.version,
     });
-    dialog.showMessageBox({
-      type: 'question',
-      buttons: ['지금 설치 후 재시작', '나중에'],
-      defaultId: 0,
-      title: '업데이트 완료',
-      message: '새로운 버전 다운로드가 완료되었습니다. 지금 재시작하여 설치하시겠습니까?',
-      cancelId: 1
-    }).then((result) => {
-      if (result.response === 0) {
-        autoUpdater.quitAndInstall();
-      }
-    });
+    dialog
+      .showMessageBox({
+        type: 'question',
+        buttons: ['지금 설치 후 재시작', '나중에'],
+        defaultId: 0,
+        title: '업데이트 완료',
+        message: '새로운 버전 다운로드가 완료되었습니다. 지금 재시작하여 설치하시겠습니까?',
+        cancelId: 1,
+      })
+      .then((result) => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      });
   });
 
   // 업데이트 중 오류 발생
@@ -242,7 +247,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('quit', () => {
-  if (server && server.close) {
+  if (server?.close) {
     server.close();
   }
 });

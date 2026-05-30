@@ -1,6 +1,6 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 dotenv.config();
 
@@ -12,7 +12,7 @@ let userDataPath;
 try {
   const { app } = await import('electron');
   userDataPath = app.getPath('userData');
-} catch (e) {
+} catch (_e) {
   userDataPath = process.cwd();
 }
 

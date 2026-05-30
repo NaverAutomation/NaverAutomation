@@ -1,14 +1,21 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
-import db from '../db/database.js';
 import { CONFIG } from '../config.js';
+import db from '../db/database.js';
 import { generateContent } from '../services/ai-service.js';
 import { postToNaver } from '../services/naver-service.js';
-import { encrypt, decrypt } from '../utils/crypto.js';
-import { startScheduler, stopScheduler, getSchedulerStatus, processScheduledPosts, emitLog, getAvailableAccount } from '../services/scheduler.js';
+import {
+  emitLog,
+  getAvailableAccount,
+  getSchedulerStatus,
+  processScheduledPosts,
+  startScheduler,
+  stopScheduler,
+} from '../services/scheduler.js';
+import { decrypt, encrypt } from '../utils/crypto.js';
 import { getGlobalSetting } from '../utils/supabase.js';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,10 +28,14 @@ const router = express.Router();
 
 // GET /accounts
 router.get('/accounts', (req, res) => {
-  db.all('SELECT id, naver_id, status, round_robin_order FROM accounts WHERE user_id = ? ORDER BY round_robin_order ASC, id ASC', [req.user.id], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+  db.all(
+    'SELECT id, naver_id, status, round_robin_order FROM accounts WHERE user_id = ? ORDER BY round_robin_order ASC, id ASC',
+    [req.user.id],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    },
+  );
 });
 
 // POST /accounts
@@ -34,28 +45,36 @@ router.post('/accounts', (req, res) => {
     return res.status(400).json({ error: 'naver_id와 naver_pw가 필요합니다.' });
   }
   const encryptedPw = encrypt(naver_pw);
-  
+
   // 기존 계정이 있는지 확인 (user_id가 NULL인 과거 데이터 호환성 처리)
   db.get('SELECT id, user_id FROM accounts WHERE naver_id = ?', [naver_id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
-    
+
     if (row) {
       if (!row.user_id) {
         // 기존에 등록되었으나 user_id가 없는 계정(업데이트 전 데이터)인 경우, 현재 유저의 소유로 편입(업데이트)
-        db.run('UPDATE accounts SET user_id = ?, naver_pw = ? WHERE id = ?', [req.user.id, encryptedPw, row.id], function(err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ id: row.id, naver_id, status: 'active' });
-        });
+        db.run(
+          'UPDATE accounts SET user_id = ?, naver_pw = ? WHERE id = ?',
+          [req.user.id, encryptedPw, row.id],
+          (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ id: row.id, naver_id, status: 'active' });
+          },
+        );
       } else {
         // 이미 주인이 있는 경우
         return res.status(400).json({ error: '이미 등록된 계정입니다.' });
       }
     } else {
       // 신규 등록
-      db.run('INSERT INTO accounts (user_id, naver_id, naver_pw) VALUES (?, ?, ?)', [req.user.id, naver_id, encryptedPw], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ id: this.lastID, naver_id, status: 'active' });
-      });
+      db.run(
+        'INSERT INTO accounts (user_id, naver_id, naver_pw) VALUES (?, ?, ?)',
+        [req.user.id, naver_id, encryptedPw],
+        function (err) {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ id: this.lastID, naver_id, status: 'active' });
+        },
+      );
     }
   });
 });
@@ -63,30 +82,41 @@ router.post('/accounts', (req, res) => {
 // DELETE /accounts/:id
 router.delete('/accounts/:id', (req, res) => {
   const accountId = req.params.id;
-  
+
   db.serialize(() => {
     db.run('BEGIN TRANSACTION');
-    
+
     // 1. 연결된 포스트의 account_id를 NULL로 변경 (데이터 보존)
-    db.run('UPDATE posts SET account_id = NULL WHERE account_id = ? AND user_id = ?', [accountId, req.user.id], (err) => {
-      if (err) {
-        db.run('ROLLBACK');
-        return res.status(500).json({ error: '데이터 연결 해제 실패: ' + err.message });
-      }
-      
-      // 2. 계정 삭제
-      db.run('DELETE FROM accounts WHERE id = ? AND user_id = ?', [accountId, req.user.id], function(err) {
+    db.run(
+      'UPDATE posts SET account_id = NULL WHERE account_id = ? AND user_id = ?',
+      [accountId, req.user.id],
+      (err) => {
         if (err) {
           db.run('ROLLBACK');
-          return res.status(500).json({ error: '계정 삭제 실패: ' + err.message });
+          return res.status(500).json({ error: `데이터 연결 해제 실패: ${err.message}` });
         }
-        
-        db.run('COMMIT', (err) => {
-          if (err) return res.status(500).json({ error: '트랜잭션 완료 실패: ' + err.message });
-          res.json({ message: '계정이 삭제되었으며, 기존 포스팅 기록은 보존되었습니다.', changes: this.changes });
-        });
-      });
-    });
+
+        // 2. 계정 삭제
+        db.run(
+          'DELETE FROM accounts WHERE id = ? AND user_id = ?',
+          [accountId, req.user.id],
+          function (err) {
+            if (err) {
+              db.run('ROLLBACK');
+              return res.status(500).json({ error: `계정 삭제 실패: ${err.message}` });
+            }
+
+            db.run('COMMIT', (err) => {
+              if (err) return res.status(500).json({ error: `트랜잭션 완료 실패: ${err.message}` });
+              res.json({
+                message: '계정이 삭제되었으며, 기존 포스팅 기록은 보존되었습니다.',
+                changes: this.changes,
+              });
+            });
+          },
+        );
+      },
+    );
   });
 });
 
@@ -96,10 +126,14 @@ router.patch('/accounts/:id/status', (req, res) => {
   if (!['active', 'paused'].includes(status)) {
     return res.status(400).json({ error: 'status는 active 또는 paused여야 합니다.' });
   }
-  db.run('UPDATE accounts SET status = ? WHERE id = ? AND user_id = ?', [status, req.params.id, req.user.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ success: true, status });
-  });
+  db.run(
+    'UPDATE accounts SET status = ? WHERE id = ? AND user_id = ?',
+    [status, req.params.id, req.user.id],
+    (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, status });
+    },
+  );
 });
 
 // ─────────────────────────────────────────────
@@ -111,7 +145,8 @@ router.get('/settings', (req, res) => {
   db.all('SELECT * FROM settings WHERE user_id = ?', [req.user.id], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     const settings = rows.reduce((acc, row) => {
-      return { ...acc, [row.key]: row.value };
+      acc[row.key] = row.value;
+      return acc;
     }, {});
     res.json(settings);
   });
@@ -122,7 +157,11 @@ router.post('/settings', (req, res) => {
   const settings = req.body;
   db.serialize(() => {
     Object.entries(settings).forEach(([key, value]) => {
-      db.run('INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, ?, ?)', [req.user.id, key, value]);
+      db.run('INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, ?, ?)', [
+        req.user.id,
+        key,
+        value,
+      ]);
     });
     res.json({ success: true });
   });
@@ -135,10 +174,14 @@ router.post('/settings', (req, res) => {
 // 공통: DB에서 설정 가져오기
 async function getSettingFromDB(userId, keyName) {
   return new Promise((resolve, reject) => {
-    db.get('SELECT value FROM settings WHERE user_id = ? AND key = ?', [userId, keyName], (err, row) => {
-      if (err) return reject(err);
-      resolve(row ? row.value : null);
-    });
+    db.get(
+      'SELECT value FROM settings WHERE user_id = ? AND key = ?',
+      [userId, keyName],
+      (err, row) => {
+        if (err) return reject(err);
+        resolve(row ? row.value : null);
+      },
+    );
   });
 }
 
@@ -150,7 +193,8 @@ router.post('/generate', async (req, res) => {
   try {
     let aiConfig;
     if (engine === 'ollama') {
-      const endpoint = (await getSettingFromDB(req.user.id, 'ollama_endpoint')) || 'http://localhost:11434';
+      const endpoint =
+        (await getSettingFromDB(req.user.id, 'ollama_endpoint')) || 'http://localhost:11434';
       const model = (await getSettingFromDB(req.user.id, 'ollama_model')) || 'llama3';
       aiConfig = { endpoint, model };
     } else {
@@ -158,7 +202,7 @@ router.post('/generate', async (req, res) => {
       if (!masterKey || masterKey === 'YOUR_KEY_HERE') {
         return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
       }
-      
+
       const apiKey = masterKey;
       const model = (await getSettingFromDB(req.user.id, 'gemini_model')) || 'auto';
       aiConfig = { apiKey, model };
@@ -173,22 +217,27 @@ router.post('/generate', async (req, res) => {
 
 // POST /generate/edit  ← 신규: 기존 글 AI로 수정
 router.post('/generate/edit', async (req, res) => {
-  const { content, instruction = '블로그 글을 더 자연스럽고 SEO에 최적화된 형태로 다듬어주세요.', engine = 'gemini' } = req.body;
+  const {
+    content,
+    instruction = '블로그 글을 더 자연스럽고 SEO에 최적화된 형태로 다듬어주세요.',
+    engine = 'gemini',
+  } = req.body;
   if (!content) return res.status(400).json({ error: '수정할 내용을 입력해주세요.' });
 
   try {
     let editedContent;
     if (engine === 'ollama') {
-      const endpoint = (await getSettingFromDB(req.user.id, 'ollama_endpoint')) || 'http://localhost:11434';
+      const endpoint =
+        (await getSettingFromDB(req.user.id, 'ollama_endpoint')) || 'http://localhost:11434';
       const model = (await getSettingFromDB(req.user.id, 'ollama_model')) || 'gemma4:e4b';
-      
+
       let baseUrl = endpoint.trim();
       if (baseUrl.endsWith('/api/generate')) {
         baseUrl = baseUrl.replace(/\/api\/generate$/, '');
       } else if (baseUrl.endsWith('/api/generate/')) {
         baseUrl = baseUrl.replace(/\/api\/generate\/$/, '');
       }
-      
+
       const url = baseUrl.endsWith('/') ? `${baseUrl}api/generate` : `${baseUrl}/api/generate`;
 
       const response = await fetch(url, {
@@ -207,20 +256,22 @@ router.post('/generate/edit', async (req, res) => {
       if (!masterKey || masterKey === 'YOUR_KEY_HERE') {
         return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
       }
-      
+
       const apiKey = masterKey;
       const geminiModelPreference = (await getSettingFromDB(req.user.id, 'gemini_model')) || 'auto';
-      
+
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(apiKey);
-      
+
       let modelName = geminiModelPreference;
       if (modelName === 'auto') {
         modelName = 'gemini-2.5-flash-lite';
       }
 
       const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(`다음 글을 수정해주세요.\n지시사항: ${instruction}\n\n원문:\n${content}`);
+      const result = await model.generateContent(
+        `다음 글을 수정해주세요.\n지시사항: ${instruction}\n\n원문:\n${content}`,
+      );
       editedContent = result.response.text();
     }
 
@@ -236,10 +287,14 @@ router.post('/generate/edit', async (req, res) => {
 
 // GET /campaigns
 router.get('/campaigns', (req, res) => {
-  db.all('SELECT * FROM campaigns WHERE user_id = ? ORDER BY id DESC', [req.user.id], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+  db.all(
+    'SELECT * FROM campaigns WHERE user_id = ? ORDER BY id DESC',
+    [req.user.id],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    },
+  );
 });
 
 // POST /campaigns
@@ -250,10 +305,10 @@ router.post('/campaigns', (req, res) => {
   db.run(
     'INSERT INTO campaigns (user_id, title, content, image_url) VALUES (?, ?, ?, ?)',
     [req.user.id, title, content, image_url || null],
-    function(err) {
+    function (err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ id: this.lastID, success: true });
-    }
+    },
   );
 });
 
@@ -266,19 +321,23 @@ router.patch('/campaigns/:id/status', (req, res) => {
   db.run(
     'UPDATE campaigns SET status = ? WHERE id = ? AND user_id = ?',
     [status, req.params.id, req.user.id],
-    function(err) {
+    (err) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ success: true, status });
-    }
+    },
   );
 });
 
 // DELETE /campaigns/:id
 router.delete('/campaigns/:id', (req, res) => {
-  db.run('DELETE FROM campaigns WHERE id = ? AND user_id = ?', [req.params.id, req.user.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ success: true });
-  });
+  db.run(
+    'DELETE FROM campaigns WHERE id = ? AND user_id = ?',
+    [req.params.id, req.user.id],
+    (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true });
+    },
+  );
 });
 
 // ─────────────────────────────────────────────
@@ -287,18 +346,26 @@ router.delete('/campaigns/:id', (req, res) => {
 
 // GET /posts (발행 히스토리)
 router.get('/posts', (req, res) => {
-  db.all("SELECT p.*, a.naver_id FROM posts p LEFT JOIN accounts a ON p.account_id = a.id WHERE p.user_id = ? AND p.status IN ('published', 'failed') ORDER BY p.id DESC LIMIT 50", [req.user.id], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+  db.all(
+    "SELECT p.*, a.naver_id FROM posts p LEFT JOIN accounts a ON p.account_id = a.id WHERE p.user_id = ? AND p.status IN ('published', 'failed') ORDER BY p.id DESC LIMIT 50",
+    [req.user.id],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    },
+  );
 });
 
 // GET /posts/scheduled
 router.get('/posts/scheduled', (req, res) => {
-  db.all("SELECT p.*, a.naver_id FROM posts p LEFT JOIN accounts a ON p.account_id = a.id WHERE p.user_id = ? AND p.status IN ('scheduled', 'pending', 'processing') ORDER BY p.scheduled_at ASC NULLS LAST, p.id DESC", [req.user.id], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+  db.all(
+    "SELECT p.*, a.naver_id FROM posts p LEFT JOIN accounts a ON p.account_id = a.id WHERE p.user_id = ? AND p.status IN ('scheduled', 'pending', 'processing') ORDER BY p.scheduled_at ASC NULLS LAST, p.id DESC",
+    [req.user.id],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    },
+  );
 });
 
 // POST /posts/:id/retry
@@ -307,12 +374,15 @@ router.post('/posts/:id/retry', (req, res) => {
   db.run(
     "UPDATE posts SET status = 'scheduled', scheduled_at = datetime('now') WHERE id = ? AND user_id = ? AND status = 'failed'",
     [id, req.user.id],
-    function(err) {
+    function (err) {
       if (err) return res.status(500).json({ error: err.message });
-      if (this.changes === 0) return res.status(404).json({ error: '실패 상태인 포스트를 찾을 수 없거나 이미 처리되었습니다.' });
+      if (this.changes === 0)
+        return res
+          .status(404)
+          .json({ error: '실패 상태인 포스트를 찾을 수 없거나 이미 처리되었습니다.' });
       processScheduledPosts();
       res.json({ success: true, message: '포스트가 예약 목록으로 이동되었습니다.' });
-    }
+    },
   );
 });
 
@@ -322,19 +392,37 @@ router.post('/posts/schedule', (req, res) => {
   if (!title || !content) return res.status(400).json({ error: '제목과 내용은 필수입니다.' });
 
   const status = scheduled_at ? 'scheduled' : 'pending';
-  const sql = 'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
-  db.run(sql, [req.user.id, account_id || null, title, content, image_url || null, headless ? 1 : 0, scheduled_at || null, status], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, status });
-  });
+  const sql =
+    'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+  db.run(
+    sql,
+    [
+      req.user.id,
+      account_id || null,
+      title,
+      content,
+      image_url || null,
+      headless ? 1 : 0,
+      scheduled_at || null,
+      status,
+    ],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID, status });
+    },
+  );
 });
 
 // DELETE /posts/scheduled/:id
 router.delete('/posts/scheduled/:id', (req, res) => {
-  db.run("DELETE FROM posts WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing', 'failed')", [req.params.id, req.user.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ success: true });
-  });
+  db.run(
+    "DELETE FROM posts WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing', 'failed')",
+    [req.params.id, req.user.id],
+    (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true });
+    },
+  );
 });
 
 // POST /posts/:id/publish-now
@@ -343,11 +431,15 @@ router.post('/posts/:id/publish-now', (req, res) => {
   db.run(
     "UPDATE posts SET status = 'scheduled', scheduled_at = datetime('now') WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing', 'failed')",
     [id, req.user.id],
-    function(err) {
+    (err) => {
       if (err) return res.status(500).json({ error: err.message });
       processScheduledPosts();
-      res.json({ success: true, message: '스케줄러 백그라운드에서 강제 발행을 시작했습니다. (상태 업데이트까지 시간이 걸릴 수 있습니다.)' });
-    }
+      res.json({
+        success: true,
+        message:
+          '스케줄러 백그라운드에서 강제 발행을 시작했습니다. (상태 업데이트까지 시간이 걸릴 수 있습니다.)',
+      });
+    },
   );
 });
 
@@ -362,10 +454,14 @@ router.post('/post', async (req, res) => {
     let account = null;
     if (account_id) {
       account = await new Promise((resolve, reject) => {
-        db.get('SELECT * FROM accounts WHERE id = ? AND user_id = ?', [account_id, req.user.id], (err, row) => {
-          if (err) return reject(err);
-          resolve(row || null);
-        });
+        db.get(
+          'SELECT * FROM accounts WHERE id = ? AND user_id = ?',
+          [account_id, req.user.id],
+          (err, row) => {
+            if (err) return reject(err);
+            resolve(row || null);
+          },
+        );
       });
     } else {
       account = await getAvailableAccount(req.user.id);
@@ -382,14 +478,14 @@ router.post('/post', async (req, res) => {
     const status = result.success ? 'published' : 'failed';
     db.run(
       'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [req.user.id, account.id, title, content, image_url || null, headless ? 1 : 0, status]
+      [req.user.id, account.id, title, content, image_url || null, headless ? 1 : 0, status],
     );
-    
+
     if (result.success) {
       // 성공 시 계정 카운트 및 순서 업데이트
       db.run(
-        "UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?",
-        [new Date().toISOString().split('T')[0], account.id]
+        'UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?',
+        [new Date().toISOString().split('T')[0], account.id],
       );
       emitLog('success', `[수기 발행] 성공적으로 포스팅되었습니다: ${title}`, req.user.id);
     } else {
@@ -424,13 +520,13 @@ router.post('/task/start', async (req, res) => {
 });
 
 // POST /task/stop
-router.post('/task/stop', (req, res) => {
+router.post('/task/stop', (_req, res) => {
   const result = stopScheduler();
   res.json({ success: result, status: getSchedulerStatus() });
 });
 
 // GET /task/status
-router.get('/task/status', (req, res) => {
+router.get('/task/status', (_req, res) => {
   res.json(getSchedulerStatus());
 });
 
@@ -441,15 +537,19 @@ router.get('/task/status', (req, res) => {
 // GET /logs
 router.get('/logs', (req, res) => {
   const limit = req.query.limit || 100;
-  db.all('SELECT * FROM logs WHERE user_id = ? OR user_id IS NULL ORDER BY id DESC LIMIT ?', [req.user.id, limit], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows.reverse());
-  });
+  db.all(
+    'SELECT * FROM logs WHERE user_id = ? OR user_id IS NULL ORDER BY id DESC LIMIT ?',
+    [req.user.id, limit],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows.reverse());
+    },
+  );
 });
 
 // DELETE /logs
 router.delete('/logs', (req, res) => {
-  db.run('DELETE FROM logs WHERE user_id = ?', [req.user.id], function(err) {
+  db.run('DELETE FROM logs WHERE user_id = ?', [req.user.id], (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ success: true });
   });
@@ -471,7 +571,7 @@ router.post('/upload', (req, res) => {
     // data:image/png;base64,... 헤더 제거
     const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
     const fileBuffer = Buffer.from(cleanBase64, 'base64');
-    
+
     const fileExt = path.extname(fileName) || '.png';
     const safeFileName = `${Date.now()}_img${fileExt}`;
     const filePath = path.join(uploadDir, safeFileName);

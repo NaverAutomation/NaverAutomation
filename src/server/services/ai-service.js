@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 /**
  * Google Gemini 모델 자동 선택 로직
  */
-function selectBestGeminiModel(content) {
+function _selectBestGeminiModel(_content) {
   return 'gemini-2.5-flash-lite';
 }
 
@@ -12,11 +12,17 @@ function selectBestGeminiModel(content) {
  */
 async function generateWithGemini(apiKey, keyword, modelPreference = 'auto') {
   const genAI = new GoogleGenerativeAI(apiKey);
-  
+
   // 모델 결정 (유저 요청에 따라 2.5 Flash Lite 우선)
   let modelName = modelPreference === 'auto' ? 'gemini-2.5-flash-lite' : modelPreference;
-  
-  const availableModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+
+  const availableModels = [
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash',
+  ];
   if (!availableModels.includes(modelName)) {
     modelName = 'gemini-2.5-flash-lite';
   }
@@ -50,11 +56,16 @@ async function generateWithGemini(apiKey, keyword, modelPreference = 'auto') {
 /**
  * Google Gemini를 이용한 기존 원고 재작성 (Rewrite)
  */
-export async function generateRewriteWithGemini(apiKey, originalTitle, originalContent, modelPreference = 'auto') {
+export async function generateRewriteWithGemini(
+  apiKey,
+  originalTitle,
+  originalContent,
+  modelPreference = 'auto',
+) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  
+
   // 유저 명시적 요청: gemini-2.5-flash-lite 사용
-  let modelName = modelPreference === 'auto' ? 'gemini-2.5-flash-lite' : modelPreference;
+  const modelName = modelPreference === 'auto' ? 'gemini-2.5-flash-lite' : modelPreference;
 
   console.log(`[Gemini/Rewrite] Rewriting content with model: ${modelName}`);
 
@@ -93,7 +104,7 @@ async function generateWithOllama(endpoint, model, keyword) {
     } else if (baseUrl.endsWith('/api/generate/')) {
       baseUrl = baseUrl.replace(/\/api\/generate\/$/, '');
     }
-    
+
     // 최종 URL 조립
     const url = baseUrl.endsWith('/') ? `${baseUrl}api/generate` : `${baseUrl}/api/generate`;
     console.log(`[Ollama] Requesting URL: ${url} (Model: ${model || 'gemma4'})`);

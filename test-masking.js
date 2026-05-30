@@ -14,7 +14,8 @@ db.all('SELECT * FROM settings', [], (err, rows) => {
         value = 'sk-****';
       }
     }
-    return { ...acc, [row.key]: value };
+    acc[row.key] = value;
+    return acc;
   }, {});
   console.log('Masked settings:', settings);
   process.exit(0);

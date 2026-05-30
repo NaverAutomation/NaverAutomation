@@ -1,10 +1,10 @@
-import http from 'http';
+import http from 'node:http';
 
 const data = JSON.stringify({
   id: 'testuser',
   password: 'testpass',
   blogId: 'testblog',
-  apiKey: 'testkey'
+  apiKey: 'testkey',
 });
 
 const options = {
@@ -14,8 +14,8 @@ const options = {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'Content-Length': data.length
-  }
+    'Content-Length': data.length,
+  },
 };
 
 const req = http.request(options, (res) => {

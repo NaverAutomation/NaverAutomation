@@ -1,8 +1,8 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { chromium } from 'playwright';
 import { CONFIG } from '../config.js';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
 
 /**
  * URL에서 이미지를 다운로드하여 임시 경로에 저장합니다.
@@ -29,7 +29,7 @@ async function loginToNaver(page, account) {
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }
   }, account.naver_id);
-  
+
   await page.waitForTimeout(Math.random() * 200 + 100);
 
   await page.evaluate((pw) => {
@@ -42,22 +42,25 @@ async function loginToNaver(page, account) {
 
   await page.waitForTimeout(Math.random() * 200 + 100);
   await page.click('.btn_login');
-  
+
   // 로그인 완료(페이지 이동) 또는 에러 메시지 출력 대기
   try {
     await Promise.race([
       page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 8000 }),
-      page.waitForFunction(() => {
-        const errEl = document.querySelector('.error_message');
-        return errEl && errEl.style.display !== 'none' && errEl.innerText.trim().length > 0;
-      }, { timeout: 8000 })
+      page.waitForFunction(
+        () => {
+          const errEl = document.querySelector('.error_message');
+          return errEl && errEl.style.display !== 'none' && errEl.innerText.trim().length > 0;
+        },
+        { timeout: 8000 },
+      ),
     ]);
-  } catch (e) {
+  } catch (_e) {
     console.log('Navigation or error wait timeout, checking current state...');
   }
 
   // 로그인 페이지에 계속 머물러 있는 경우 실패로 간주하고 원인 파악
-  let currentUrl = page.url();
+  const currentUrl = page.url();
   if (currentUrl.includes('nidlogin.login')) {
     let errorMsg = null;
     let hasCaptcha = false;
@@ -67,37 +70,42 @@ async function loginToNaver(page, account) {
         const errEl = document.querySelector('.error_message');
         if (errEl && errEl.style.display !== 'none') {
           let text = errEl.innerText.trim();
-          text = text.replace(/\n/g, ' ')
-                     .replace(/Caps Lock이 켜져 있습니다\.?/g, '')
-                     .replace(/\s+/g, ' ')
-                     .trim();
+          text = text
+            .replace(/\n/g, ' ')
+            .replace(/Caps Lock이 켜져 있습니다\.?/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
           return text || '로그인 정보를 확인해주세요.';
         }
         return null;
       });
-    } catch (e) {
+    } catch (_e) {
       console.log('Context destroyed during error check, assuming successful navigation.');
     }
 
     if (errorMsg) {
       throw new Error(`자동 로그인 실패: ${errorMsg}`);
     }
-    
+
     try {
       const captchaImg = await page.$('#captcha_image, #chptcha');
       if (captchaImg) hasCaptcha = true;
-    } catch (e) {
+    } catch (_e) {
       console.log('Context destroyed during captcha check, assuming successful navigation.');
     }
 
     if (hasCaptcha) {
-      throw new Error('자동 로그인 실패: 캡차(보안문자) 인증이 발생했습니다. 직접 브라우저에서 로그인하여 해제해야 할 수 있습니다.');
+      throw new Error(
+        '자동 로그인 실패: 캡차(보안문자) 인증이 발생했습니다. 직접 브라우저에서 로그인하여 해제해야 할 수 있습니다.',
+      );
     }
 
     // 최종 확인 (미세 타이밍 극복)
     await page.waitForTimeout(1000);
     if (page.url().includes('nidlogin.login')) {
-      throw new Error('자동 로그인 실패: 원인을 알 수 없는 이유로 로그인 페이지를 벗어나지 못했습니다.');
+      throw new Error(
+        '자동 로그인 실패: 원인을 알 수 없는 이유로 로그인 페이지를 벗어나지 못했습니다.',
+      );
     }
   }
 }
@@ -121,16 +129,16 @@ async function closeEditorPopups(page) {
       await cancelBtn.click({ force: true });
       console.log('Closed draft popup.');
     }
-  } catch (e) {}
+  } catch (_e) {}
 
   try {
     // 2차 방어: 도움말 닫기 버튼 텍스트 기반 또는 클래스 기반 클릭
     const helpSelectors = [
       'button:has-text("도움말 닫기")',
       'button[title="도움말 닫기"]',
-      '.se-help-panel-close-button'
+      '.se-help-panel-close-button',
     ];
-    
+
     for (const selector of helpSelectors) {
       const helpBtn = page.locator(selector).first();
       if (await helpBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
@@ -139,7 +147,7 @@ async function closeEditorPopups(page) {
         break;
       }
     }
-  } catch (e) {}
+  } catch (_e) {}
 
   console.log('Cleared overlay popups.');
 }
@@ -149,23 +157,26 @@ async function closeEditorPopups(page) {
  */
 async function fillEditorTitle(page, title) {
   // 제목에 섞여 들어올 수 있는 마크다운 기호(**, *, # 등)와 불필요한 줄바꿈 제거
-  const cleanTitle = title.replace(/(\*\*|\*|__|_|~~|~|#|`|>)/g, '').replace(/\n/g, ' ').trim();
+  const cleanTitle = title
+    .replace(/(\*\*|\*|__|_|~~|~|#|`|>)/g, '')
+    .replace(/\n/g, ' ')
+    .trim();
   console.log(`Typing title: ${cleanTitle.substring(0, 20)}...`);
   try {
     // 텍스트 노드가 비어있으면 크기가 0이라 클릭이 안 먹힐 수 있습니다.
     // 에디터의 제목 겉 컨테이너를 클릭해서 에디터 자체가 자연스럽게 커서를 넣도록 유도합니다.
     const titleArea = page.locator('.se-documentTitle').first();
     await titleArea.waitFor({ state: 'visible', timeout: 10000 });
-    
+
     // 부드럽게 중앙 클릭
     await titleArea.click();
-    
+
     // 포커스가 잡히고 커서가 깜빡일 때까지 대기
     await page.waitForTimeout(500);
-    
+
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Backspace');
-    
+
     await page.keyboard.type(cleanTitle, { delay: 30 });
     console.log('Title input completed.');
   } catch (e) {
@@ -213,14 +224,13 @@ async function uploadImageToEditor(page, imageUrl) {
       page.waitForEvent('filechooser', { timeout: 10000 }),
       imageBtn.click({ force: true }),
     ]);
-    
+
     await fileChooser.setFiles(imagePath);
     console.log('Image file set via filechooser. Waiting for upload to complete...');
-    
+
     // 네이버 에디터 내 업로드 완료 대기 (명시적인 슬립 대신 넉넉하게 기다림)
     await page.waitForTimeout(4000);
     console.log('Image upload completed.');
-    
   } catch (err) {
     console.error('Image upload failed:', err.message);
   } finally {
@@ -240,20 +250,22 @@ async function fillEditorContent(page, content) {
   try {
     const contentCount = await page.locator('.se-component-content').count();
     const contentArea = page.locator('.se-component-content').nth(contentCount - 1);
-    
+
     await contentArea.waitFor({ state: 'visible', timeout: 5000 });
     await contentArea.click({ force: true });
-    
+
     // 이미지 덮어쓰기 방지: 커서를 아래 문단으로 이동
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
     await page.waitForTimeout(100);
-    
+
     // 서식 초기화
     await page.evaluate(() => {
       const activeToggles = document.querySelectorAll('button.se-is-selected[data-type="toggle"]');
-      activeToggles.forEach(btn => btn.click());
+      activeToggles.forEach((btn) => {
+        btn.click();
+      });
     });
 
     await page.keyboard.type(cleanContent, { delay: 10 });
@@ -272,7 +284,7 @@ async function removeStrikethrough(page) {
   console.log('Verifying and removing any unexpected strikethrough formatting...');
   await page.evaluate(() => {
     const elements = document.querySelectorAll('strike, s, span, p, div');
-    elements.forEach(el => {
+    elements.forEach((el) => {
       const tagName = el.tagName.toLowerCase();
       if (tagName === 'strike' || tagName === 's') {
         const parent = el.parentNode;
@@ -280,7 +292,7 @@ async function removeStrikethrough(page) {
           parent.insertBefore(el.firstChild, el);
         }
         parent.removeChild(el);
-      } else if (el.style && el.style.textDecoration && el.style.textDecoration.includes('line-through')) {
+      } else if (el.style?.textDecoration?.includes('line-through')) {
         el.style.textDecoration = el.style.textDecoration.replace('line-through', '').trim();
       }
     });
@@ -293,14 +305,16 @@ async function removeStrikethrough(page) {
 async function publishPostAction(page) {
   console.log('Publishing post...');
   await page.waitForTimeout(1000); // 렌더링 안정화
-  
+
   // 1차 발행 버튼 (에디터 상단 우측)
-  const publishBtn = page.locator('.publish_btn__m9KHH, button[data-click-area="tpb.publish"]').first();
+  const publishBtn = page
+    .locator('.publish_btn__m9KHH, button[data-click-area="tpb.publish"]')
+    .first();
   await publishBtn.waitFor({ state: 'visible', timeout: 10000 });
   await publishBtn.click({ force: true });
-  
+
   // 모달 애니메이션 대기
-  await page.waitForTimeout(1000); 
+  await page.waitForTimeout(1000);
 
   // 2차 최종 발행 버튼 (팝업 내부)
   const finalPublishSelectors = [
@@ -356,24 +370,30 @@ async function publishPostAction(page) {
 export async function postToNaver(account, post, options = {}) {
   let browser;
   try {
-    let effectiveHeadless = typeof options.headless === 'boolean' ? options.headless : CONFIG.HEADLESS;
+    let effectiveHeadless =
+      typeof options.headless === 'boolean' ? options.headless : CONFIG.HEADLESS;
     if (process.env.NODE_ENV === 'development' || !effectiveHeadless) {
       console.log('[Dev Mode] Auto-disabling headless mode to display browser window.');
       effectiveHeadless = false;
     }
 
-    browser = await chromium.launch({ 
+    browser = await chromium.launch({
       headless: effectiveHeadless,
-      args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--disable-blink-features=AutomationControlled',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+      ],
     });
-    
+
     const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       viewport: { width: 1280, height: 800 },
       locale: 'ko-KR',
       timezoneId: 'Asia/Seoul',
     });
-    
+
     const page = await context.newPage();
 
     // 1. 로그인
@@ -381,20 +401,22 @@ export async function postToNaver(account, post, options = {}) {
 
     // 2. 글쓰기 에디터 진입
     console.log(`Navigating to blog write page for ${account.naver_id}...`);
-    await page.goto(`https://blog.naver.com/${account.naver_id}/postwrite`, { waitUntil: 'domcontentloaded' });
-    
+    await page.goto(`https://blog.naver.com/${account.naver_id}/postwrite`, {
+      waitUntil: 'domcontentloaded',
+    });
+
     // 2-1. 흰 화면 버그(에디터 렌더링 실패) 방어 로직: 에디터 컨테이너가 5초 내에 안 뜨면 새로고침
     try {
       const editorWrap = page.locator('.se-documentTitle').first();
       await editorWrap.waitFor({ state: 'visible', timeout: 5000 });
       console.log('Editor loaded successfully on first try.');
-    } catch (e) {
+    } catch (_e) {
       console.warn('Blank screen detected or editor failed to render. Triggering page reload...');
       await page.reload({ waitUntil: 'domcontentloaded' });
       // 리로드 후 에디터가 뜰 때까지 조금 더 기다려줍니다.
       await page.waitForTimeout(3000);
     }
-    
+
     // 3. 에디터 팝업 정리
     await closeEditorPopups(page);
 
@@ -419,7 +441,8 @@ export async function postToNaver(account, post, options = {}) {
     if (error?.message?.includes("Executable doesn't exist")) {
       return {
         success: false,
-        message: 'Playwright 브라우저가 설치되지 않았습니다. 프로젝트 루트에서 "npx playwright install chromium" 을 1회 실행해 주세요.',
+        message:
+          'Playwright 브라우저가 설치되지 않았습니다. 프로젝트 루트에서 "npx playwright install chromium" 을 1회 실행해 주세요.',
       };
     }
     return { success: false, message: error.message };

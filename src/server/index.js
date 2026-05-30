@@ -1,14 +1,14 @@
-import express from 'express';
+import { createServer } from 'node:http';
+import net from 'node:net';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import cors from 'cors';
-import net from 'net';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { createServer } from 'http';
+import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { CONFIG } from './config.js';
+import { requireAuth } from './middleware/auth.js';
 import apiRouter from './routes/api.js';
 import { setIO } from './services/scheduler.js';
-import { requireAuth } from './middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
-  cors: { origin: '*' }
+  cors: { origin: '*' },
 });
 
 // Socket.io를 스케줄러에 연결
@@ -98,6 +98,6 @@ export const startServer = (initialPort = CONFIG.PORT) => {
 };
 
 // 직접 실행될 때만 서버를 시작 (예: node src/server/index.js)
-if (process.argv[1] && process.argv[1].endsWith('index.js')) {
+if (process.argv[1]?.endsWith('index.js')) {
   startServer();
 }

@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import { CONFIG } from '../config.js';
 
 const ALGORITHM = 'aes-256-gcm';
@@ -26,7 +26,7 @@ export function encrypt(text) {
  * @returns {string} - The decrypted plain text.
  */
 export function decrypt(encryptedText) {
-  if (!encryptedText || !encryptedText.includes(':')) return encryptedText;
+  if (!encryptedText?.includes(':')) return encryptedText;
   try {
     const parts = encryptedText.split(':');
     if (parts.length !== 3) return encryptedText;

@@ -4,14 +4,18 @@ import { decrypt, encrypt } from './src/server/utils/crypto.js';
 async function test() {
   const originalKey = 'sk-real-secret-key-1234';
   const encryptedKey = encrypt(originalKey);
-  
+
   // 1. Setup DB
   await new Promise((resolve) => {
-    db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['openai_api_key', encryptedKey], resolve);
+    db.run(
+      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+      ['openai_api_key', encryptedKey],
+      resolve,
+    );
   });
 
   // 2. Simulate POST /generate logic
-  let apiKey = 'sk-****1234'; // Masked key from body
+  const apiKey = 'sk-****1234'; // Masked key from body
   let openaiApiKey = apiKey;
 
   if (!openaiApiKey || openaiApiKey.includes('****')) {
@@ -27,7 +31,7 @@ async function test() {
   const decryptedApiKey = decrypt(openaiApiKey);
   console.log('Decrypted key:', decryptedApiKey);
   console.log('Match original:', decryptedApiKey === originalKey);
-  
+
   process.exit(0);
 }
 

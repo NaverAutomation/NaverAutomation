@@ -13,13 +13,20 @@ export async function generateContent(apiKey, keyword) {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
-        { role: 'system', content: '당신은 블로그 포스팅 전문가입니다. 반드시 결과를 [TITLE]제목내용[/TITLE] [CONTENT]본문내용[/CONTENT] 형식으로 작성하세요.' },
-        { role: 'user', content: `${keyword} 주제로 블로그 포스팅 원고를 작성해줘. 제목과 본문을 구분해줘.` },
+        {
+          role: 'system',
+          content:
+            '당신은 블로그 포스팅 전문가입니다. 반드시 결과를 [TITLE]제목내용[/TITLE] [CONTENT]본문내용[/CONTENT] 형식으로 작성하세요.',
+        },
+        {
+          role: 'user',
+          content: `${keyword} 주제로 블로그 포스팅 원고를 작성해줘. 제목과 본문을 구분해줘.`,
+        },
       ],
     });
 
     const fullText = response.choices[0].message.content;
-    
+
     // 제목과 본문을 [TITLE], [CONTENT] 태그로 추출하는 정규식
     const titleMatch = fullText.match(/\[TITLE\](.*?)\[\/TITLE\]/s);
     const contentMatch = fullText.match(/\[CONTENT\](.*?)\[\/CONTENT\]/s);
