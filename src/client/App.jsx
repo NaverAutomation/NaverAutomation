@@ -1,19 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { apiFetch } from './utils/api';
-import { useSocket } from './hooks/useSocket';
+import { useCallback, useEffect, useState } from 'react';
+// Auth
+import Login from './components/Login.jsx';
+import AccountsTab from './components/tabs/AccountsTab';
 
 // Tabs
 import DashboardTab from './components/tabs/DashboardTab';
-import SettingsTab from './components/tabs/SettingsTab';
-import AccountsTab from './components/tabs/AccountsTab';
-import CampaignsTab from './components/tabs/CampaignsTab';
 import GenerateTab from './components/tabs/GenerateTab';
-import EditTab from './components/tabs/EditTab';
-import ScheduledTab from './components/tabs/ScheduledTab';
 import LogsTab from './components/tabs/LogsTab';
-
-// Auth
-import Login from './components/Login.jsx';
+import SettingsTab from './components/tabs/SettingsTab';
+import { apiFetch } from './utils/api';
 import { supabase } from './utils/supabase.js';
 
 const WEB_APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'unknown';
@@ -40,20 +35,21 @@ const resolveLatestVersion = (payload, fallbackVersion) => {
 
 const TABS = [
   { id: 'dashboard', label: '🏠 대시보드' },
-  { id: 'accounts',  label: '👤 계정 관리' },
-  { id: 'campaigns', label: '🎯 캠페인 (24/7)' },
-  { id: 'generate',  label: '✍️ 글 생성' },
-  { id: 'edit',      label: '📝 글 수정' },
-  { id: 'scheduled', label: '📅 예약 목록' },
-  { id: 'logs',      label: '📊 로그' },
-  { id: 'settings',  label: '⚙️ 설정' },
+  { id: 'accounts', label: '👤 계정 관리' },
+  { id: 'generate', label: '✍️ 글 생성 & 관리' },
+  { id: 'logs', label: '📊 로그' },
+  { id: 'settings', label: '⚙️ 설정' },
 ];
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [reusedPost, setReusedPost] = useState(null);
-  const [taskStatus, setTaskStatus] = useState({ isRunning: false, activeWorkers: 0, maxWorkers: 3 });
+  const [taskStatus, setTaskStatus] = useState({
+    isRunning: false,
+    activeWorkers: 0,
+    maxWorkers: 3,
+  });
   const [realtimeLogs, setRealtimeLogs] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
@@ -101,7 +97,7 @@ const App = () => {
       setCampaigns(camp);
       setPosts(ps);
       setScheduledPosts(sched);
-      setSettings(prev => ({ ...prev, ...sets }));
+      setSettings((prev) => ({ ...prev, ...sets }));
       setTaskStatus(taskSt);
     } catch (err) {
       console.error('데이터 로드 오류:', err);
@@ -114,7 +110,7 @@ const App = () => {
     if (!socket) return;
 
     socket.on('log', (log) => {
-      setRealtimeLogs(prev => {
+      setRealtimeLogs((prev) => {
         const next = [...prev, log];
         return next.length > 200 ? next.slice(-200) : next;
       });
@@ -140,7 +136,8 @@ const App = () => {
       return;
     }
 
-    api.getAppVersion()
+    api
+      .getAppVersion()
       .then((version) => {
         const resolvedVersion = version || 'unknown';
         setAppVersion(resolvedVersion);
@@ -151,9 +148,10 @@ const App = () => {
         setLatestVersion('unknown');
       });
 
-    api.getLastUpdaterStatus()
+    api
+      .getLastUpdaterStatus()
       .then((status) => {
-        if (status && status.status) {
+        if (status?.status) {
           setUpdaterState(status);
           setLatestVersion((prev) => resolveLatestVersion(status, prev || 'unknown'));
         }
@@ -163,7 +161,11 @@ const App = () => {
     const unsubscribe = api.onUpdaterStatus((payload) => {
       setUpdaterState(payload);
       setLatestVersion((prev) => resolveLatestVersion(payload, prev || appVersion || 'unknown'));
-      if (payload?.status === 'update-not-available' || payload?.status === 'error' || payload?.status === 'dev-mode') {
+      if (
+        payload?.status === 'update-not-available' ||
+        payload?.status === 'error' ||
+        payload?.status === 'dev-mode'
+      ) {
         setIsCheckingUpdate(false);
       }
       if (payload?.status === 'update-available' || payload?.status === 'update-downloaded') {
@@ -174,7 +176,7 @@ const App = () => {
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [appVersion]);
 
   useEffect(() => {
     fetchAll();
@@ -208,7 +210,7 @@ const App = () => {
       const data = await apiFetch(endpoint, { method: 'POST' });
       setTaskStatus(data.status);
     } catch (err) {
-      alert('오류: ' + err.message);
+      alert(`오류: ${err.message}`);
     }
   };
 
@@ -250,17 +252,27 @@ const App = () => {
           <span className="text-3xl">🚀</span>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-black text-primary drop-shadow-sm">Naver Blog Auto</h1>
-              <span className="badge badge-sm badge-neutral opacity-50 font-mono">v{appVersion}</span>
+              <h1 className="text-xl sm:text-2xl font-black text-primary drop-shadow-sm">
+                Naver Blog Auto
+              </h1>
+              <span className="badge badge-sm badge-neutral opacity-50 font-mono">
+                v{appVersion}
+              </span>
             </div>
-            <p className="text-xs sm:text-sm text-base-content/60 font-semibold">AI 기반 네이버 블로그 자동화</p>
+            <p className="text-xs sm:text-sm text-base-content/60 font-semibold">
+              AI 기반 네이버 블로그 자동화
+            </p>
           </div>
         </div>
         <div className="flex-none gap-3 sm:gap-6">
           <div className="hidden sm:flex items-center gap-2 badge badge-outline badge-lg px-4 py-4 bg-base-200 border-base-100 shadow-inner">
-            <span className={`w-3 h-3 rounded-full ${taskStatus.isRunning ? 'bg-success shadow-[0_0_8px_#22c55e] animate-pulse' : 'bg-error'}`} />
+            <span
+              className={`w-3 h-3 rounded-full ${taskStatus.isRunning ? 'bg-success shadow-[0_0_8px_#22c55e] animate-pulse' : 'bg-error'}`}
+            />
             <span className="font-bold text-sm tracking-wide">
-              {taskStatus.isRunning ? `스케줄러 실행 중 (${taskStatus.activeWorkers}/${taskStatus.maxWorkers})` : '스케줄러 정지'}
+              {taskStatus.isRunning
+                ? `스케줄러 실행 중 (${taskStatus.activeWorkers}/${taskStatus.maxWorkers})`
+                : '스케줄러 정지'}
             </span>
           </div>
           <button
@@ -269,7 +281,7 @@ const App = () => {
           >
             {taskStatus.isRunning ? '⏹ 작업 정지' : '▶ 작업 시작'}
           </button>
-          <button 
+          <button
             onClick={handleLogout}
             className="btn btn-ghost btn-sm sm:btn-md"
             title="로그아웃"
@@ -283,7 +295,7 @@ const App = () => {
       <nav className="bg-base-200 border-b border-base-300 pt-2">
         <div className="max-w-7xl mx-auto overflow-x-auto overflow-y-hidden scrollbar-hide px-4">
           <div role="tablist" className="tabs tabs-bordered w-full flex-nowrap min-w-max pb-px">
-            {TABS.map(tab => (
+            {TABS.map((tab) => (
               <button
                 key={tab.id}
                 role="tab"
@@ -295,7 +307,7 @@ const App = () => {
                 }`}
               >
                 {tab.label}
-                {tab.id === 'scheduled' && scheduledPosts.length > 0 ? (
+                {tab.id === 'generate' && scheduledPosts.length > 0 ? (
                   <span className="badge badge-primary badge-sm ml-2 font-bold shadow-sm">
                     {scheduledPosts.length}
                   </span>
@@ -310,19 +322,18 @@ const App = () => {
       <main className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex-1">
         <div className="animate-in fade-in duration-300">
           <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
-            <DashboardTab 
-              accounts={accounts} 
-              posts={posts} 
-              scheduledPosts={scheduledPosts} 
-              taskStatus={taskStatus} 
-              realtimeLogs={realtimeLogs} 
-              fetchAll={fetchAll} 
+            <DashboardTab
+              accounts={accounts}
+              posts={posts}
+              scheduledPosts={scheduledPosts}
+              taskStatus={taskStatus}
+              realtimeLogs={realtimeLogs}
+              fetchAll={fetchAll}
             />
           </div>
           <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
-            <SettingsTab 
-              settings={settings} 
-              setSettings={setSettings} 
+            <SettingsTab
+              settings={settings}
               fetchAll={fetchAll}
               appVersion={appVersion}
               latestVersion={latestVersion}
@@ -333,30 +344,15 @@ const App = () => {
           <div style={{ display: activeTab === 'accounts' ? 'block' : 'none' }}>
             <AccountsTab accounts={accounts} fetchAll={fetchAll} />
           </div>
-          <div style={{ display: activeTab === 'campaigns' ? 'block' : 'none' }}>
-            <CampaignsTab campaigns={campaigns} fetchAll={fetchAll} />
-          </div>
           <div style={{ display: activeTab === 'generate' ? 'block' : 'none' }}>
-            <GenerateTab 
-              accounts={accounts} 
-              fetchAll={fetchAll} 
+            <GenerateTab
+              accounts={accounts}
+              campaigns={campaigns}
+              scheduledPosts={scheduledPosts}
+              posts={posts}
+              fetchAll={fetchAll}
               reusedPost={reusedPost}
               clearReusedPost={() => setReusedPost(null)}
-            />
-          </div>
-          <div style={{ display: activeTab === 'edit' ? 'block' : 'none' }}>
-            <EditTab />
-          </div>
-          <div style={{ display: activeTab === 'scheduled' ? 'block' : 'none' }}>
-            <ScheduledTab 
-              scheduledPosts={scheduledPosts} 
-              posts={posts}
-              accounts={accounts} 
-              fetchAll={fetchAll} 
-              onReusePost={(post) => {
-                setReusedPost(post);
-                setActiveTab('generate');
-              }}
             />
           </div>
           <div style={{ display: activeTab === 'logs' ? 'block' : 'none' }}>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { apiFetch } from '../../utils/api';
-import { Card, SectionTitle, Input, Btn, StatusBadge } from '../common';
+import { Btn, Card, Input, SectionTitle, StatusBadge } from '../common';
 
 const AccountsTab = React.memo(({ accounts, fetchAll }) => {
   const [form, setForm] = useState({ naver_id: '', naver_pw: '' });
@@ -15,7 +15,7 @@ const AccountsTab = React.memo(({ accounts, fetchAll }) => {
       setForm({ naver_id: '', naver_pw: '' });
       await fetchAll();
     } catch (err) {
-      alert('오류: ' + err.message);
+      alert(`오류: ${err.message}`);
     }
     setLoading(false);
   };
@@ -26,7 +26,7 @@ const AccountsTab = React.memo(({ accounts, fetchAll }) => {
       await apiFetch(`/api/accounts/${id}`, { method: 'DELETE' });
       await fetchAll();
     } catch (err) {
-      alert('오류: ' + err.message);
+      alert(`오류: ${err.message}`);
     }
   };
 
@@ -39,7 +39,7 @@ const AccountsTab = React.memo(({ accounts, fetchAll }) => {
       });
       await fetchAll();
     } catch (err) {
-      alert('오류: ' + err.message);
+      alert(`오류: ${err.message}`);
     }
   };
 
@@ -53,7 +53,7 @@ const AccountsTab = React.memo(({ accounts, fetchAll }) => {
             type="text"
             placeholder="naver_id"
             value={form.naver_id}
-            onChange={e => setForm(prev => ({ ...prev, naver_id: e.target.value }))}
+            onChange={(e) => setForm((prev) => ({ ...prev, naver_id: e.target.value }))}
             required
           />
           <Input
@@ -61,11 +61,15 @@ const AccountsTab = React.memo(({ accounts, fetchAll }) => {
             type="password"
             placeholder="비밀번호"
             value={form.naver_pw}
-            onChange={e => setForm(prev => ({ ...prev, naver_pw: e.target.value }))}
+            onChange={(e) => setForm((prev) => ({ ...prev, naver_pw: e.target.value }))}
             required
           />
           <Btn variant="success" type="submit" disabled={loading} block className="mt-2">
-            {loading ? <span className="loading loading-spinner text-base-content"></span> : <>✅ 계정 안전하게 추가</>}
+            {loading ? (
+              <span className="loading loading-spinner text-base-content"></span>
+            ) : (
+              <>✅ 계정 안전하게 추가</>
+            )}
           </Btn>
         </form>
         <div className="alert bg-base-300 text-xs sm:text-sm mt-6 p-4 rounded-xl border border-base-200">
@@ -73,7 +77,11 @@ const AccountsTab = React.memo(({ accounts, fetchAll }) => {
             <span className="font-bold block mb-1">💡 계정 운영 가이드</span>
             <ul className="list-disc pl-4 space-y-1 text-base-content/70">
               <li>비밀번호는 최고 수준으로 암호화되어 저장됩니다.</li>
-              <li>여러 계정을 추가하면 원고 <span className="font-bold underline">라운드로빈(교대배정)</span>으로 자동 순환 발행됩니다.</li>
+              <li>
+                여러 계정을 추가하면 원고{' '}
+                <span className="font-bold underline">라운드로빈(교대배정)</span>으로 자동 순환
+                발행됩니다.
+              </li>
             </ul>
           </div>
         </div>
@@ -81,7 +89,9 @@ const AccountsTab = React.memo(({ accounts, fetchAll }) => {
 
       <Card>
         <div className="flex justify-between items-center mb-5 border-b border-base-300 pb-3">
-          <h2 className="text-lg font-bold">👤 등록된 계정 <span className="text-primary">({accounts.length}개)</span></h2>
+          <h2 className="text-lg font-bold">
+            👤 등록된 계정 <span className="text-primary">({accounts.length}개)</span>
+          </h2>
         </div>
         {accounts.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 bg-base-100 rounded-xl border border-base-300 border-dashed text-base-content/40">
@@ -91,14 +101,19 @@ const AccountsTab = React.memo(({ accounts, fetchAll }) => {
         ) : (
           <div className="flex flex-col gap-3">
             {accounts.map((acc, idx) => (
-              <div key={acc.id} className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl border shadow-sm transition-all hover:bg-base-300/30 ${acc.status === 'active' ? 'border-primary/50 bg-primary/5' : 'border-base-300 bg-base-100'}`}>
+              <div
+                key={acc.id}
+                className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl border shadow-sm transition-all hover:bg-base-300/30 ${acc.status === 'active' ? 'border-primary/50 bg-primary/5' : 'border-base-300 bg-base-100'}`}
+              >
                 <div className="flex items-center gap-4">
                   <div className="badge badge-lg font-black bg-base-300 text-base-content/60 shadow-inner">
                     #{idx + 1}
                   </div>
                   <div>
                     <div className="font-bold text-lg text-base-content">{acc.naver_id}</div>
-                    <div className="text-xs font-semibold text-base-content/50 mt-0.5">라운드로빈 편성: {idx + 1}번째 배정</div>
+                    <div className="text-xs font-semibold text-base-content/50 mt-0.5">
+                      라운드로빈 편성: {idx + 1}번째 배정
+                    </div>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">

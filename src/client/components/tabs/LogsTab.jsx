@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../../utils/api';
 import { Card } from '../common';
 
@@ -7,7 +7,9 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
   const logEndRef = useRef(null);
 
   useEffect(() => {
-    apiFetch('/api/logs').then(setDbLogs).catch(() => {});
+    apiFetch('/api/logs')
+      .then(setDbLogs)
+      .catch(() => {});
   }, []);
 
   const handleClearLogs = async () => {
@@ -17,7 +19,7 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
       setRealtimeLogs([]);
       setDbLogs([]);
     } catch (err) {
-      alert('오류: ' + err.message);
+      alert(`오류: ${err.message}`);
     }
   };
 
@@ -25,10 +27,10 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
   const allLogs = [...dbLogs, ...realtimeLogs].slice(-300).reverse();
 
   const levelStyles = {
-    error:   'text-error border-error/50 bg-error/10',
+    error: 'text-error border-error/50 bg-error/10',
     success: 'text-success border-success/50 bg-success/10',
-    warn:    'text-warning border-warning/50 bg-warning/10',
-    info:    'text-info border-info/50 bg-info/10',
+    warn: 'text-warning border-warning/50 bg-warning/10',
+    info: 'text-info border-info/50 bg-info/10',
   };
 
   return (
@@ -42,7 +44,7 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
           🗑 로그 DB 비우기
         </button>
       </div>
-      
+
       <div className="flex-1 bg-slate-950 rounded-2xl p-4 sm:p-6 overflow-y-auto font-mono text-sm leading-relaxed border border-white/5 shadow-2xl scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
         {allLogs.length === 0 ? (
           <div className="h-full flex items-center justify-center text-slate-500 italic font-sans font-medium">
@@ -52,22 +54,34 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
           <div className="flex flex-col pb-4">
             {allLogs.map((log, i) => {
               const style = levelStyles[log.level] || levelStyles.info;
-              const timeStr = new Date(log.created_at).toLocaleTimeString('en-GB', { hour12: false });
-              
+              const timeStr = new Date(log.created_at).toLocaleTimeString('en-GB', {
+                hour12: false,
+              });
+
               return (
-                <div key={i} className="group flex items-start gap-4 py-1 hover:bg-white/[0.03] px-2 rounded-lg transition-colors border-b border-white/[0.02] last:border-0">
+                <div
+                  key={i}
+                  className="group flex items-start gap-4 py-1 hover:bg-white/[0.03] px-2 rounded-lg transition-colors border-b border-white/[0.02] last:border-0"
+                >
                   <span className="shrink-0 text-slate-500 text-xs font-medium pt-0.5">
                     [{timeStr}]
                   </span>
-                  <span className={`shrink-0 border px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tighter w-16 text-center shadow-sm ${style}`}>
+                  <span
+                    className={`shrink-0 border px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tighter w-16 text-center shadow-sm ${style}`}
+                  >
                     {log.level || 'info'}
                   </span>
-                  <span className={`break-words flex-1 font-medium tracking-tight ${
-                    log.level === 'error' ? 'text-red-400 font-bold' : 
-                    log.level === 'success' ? 'text-emerald-400' : 
-                    log.level === 'warn' ? 'text-amber-400' : 
-                    'text-slate-300'
-                  }`}>
+                  <span
+                    className={`break-words flex-1 font-medium tracking-tight ${
+                      log.level === 'error'
+                        ? 'text-red-400 font-bold'
+                        : log.level === 'success'
+                          ? 'text-emerald-400'
+                          : log.level === 'warn'
+                            ? 'text-amber-400'
+                            : 'text-slate-300'
+                    }`}
+                  >
                     {log.message}
                   </span>
                 </div>

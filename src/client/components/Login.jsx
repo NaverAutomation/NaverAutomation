@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '../utils/supabase';
 
 const Login = ({ onLogin }) => {
@@ -24,7 +24,7 @@ const Login = ({ onLogin }) => {
       } else if (data.session) {
         onLogin();
       }
-    } catch (err) {
+    } catch (_err) {
       setError('서버 연결 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -39,46 +39,48 @@ const Login = ({ onLogin }) => {
             <span className="text-4xl">🚀</span>
             <h2 className="card-title text-2xl font-bold text-primary">Naver Auto</h2>
           </div>
-          <p className="text-center text-base-content/60 mb-6">서비스 이용을 위해 로그인해주세요.</p>
-          
+          <p className="text-center text-base-content/60 mb-6">
+            서비스 이용을 위해 로그인해주세요.
+          </p>
+
           <form onSubmit={handleSubmit}>
             <div className="form-control">
               <label className="label">
                 <span className="label-text">이메일</span>
               </label>
-              <input 
-                type="email" 
-                placeholder="이메일을 입력하세요" 
-                className="input input-bordered" 
+              <input
+                type="email"
+                placeholder="이메일을 입력하세요"
+                className="input input-bordered"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required 
+                required
               />
             </div>
-            
+
             <div className="form-control mt-4">
               <label className="label">
                 <span className="label-text">비밀번호</span>
               </label>
-              <input 
-                type="password" 
-                placeholder="비밀번호를 입력하세요" 
-                className="input input-bordered" 
+              <input
+                type="password"
+                placeholder="비밀번호를 입력하세요"
+                className="input input-bordered"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required 
+                required
               />
             </div>
-            
+
             {error && (
               <div className="alert alert-error mt-4 py-2 px-4 text-sm font-semibold">
                 <span>{error}</span>
               </div>
             )}
-            
+
             <div className="form-control mt-8">
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className={`btn btn-primary w-full ${loading ? 'loading' : ''}`}
                 disabled={loading}
               >
@@ -86,7 +88,7 @@ const Login = ({ onLogin }) => {
               </button>
             </div>
           </form>
-          
+
           <div className="mt-6 text-xs text-center text-base-content/40">
             관리자 계정으로만 접속 가능합니다.
           </div>
