@@ -342,6 +342,27 @@ router.patch('/campaigns/:id/status', (req, res) => {
   );
 });
 
+// POST /campaigns/:id/publish-now (캠페인 즉시 1회 테스트 발행)
+router.post('/campaigns/:id/publish-now', (req, res) => {
+  const { id } = req.params;
+  db.get('SELECT * FROM campaigns WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: '캠페인을 찾을 수 없습니다.' });
+
+    if (!getSchedulerStatus().isRunning) {
+      startScheduler();
+    }
+
+    // 백그라운드에서 즉시 1회 실행
+    performTask(row);
+
+    res.json({
+      success: true,
+      message: '캠페인 포스팅을 즉시 백그라운드에서 시작했습니다. 로그 탭을 확인해 주세요.',
+    });
+  });
+});
+
 // DELETE /campaigns/:id
 router.delete('/campaigns/:id', (req, res) => {
   db.run(

@@ -373,6 +373,18 @@ const GenerateTab = React.memo(
       }
     };
 
+    // ── 작업대상 포스트(캠페인) 즉시 1회 테스트 발행 ──
+    const handleCampaignPublishNow = async (id) => {
+      if (!confirm('이 자동화 캠페인의 포스팅을 즉시 1회 백그라운드에서 실행하시겠습니까?')) return;
+      try {
+        const res = await apiFetch(`/api/campaigns/${id}/publish-now`, { method: 'POST' });
+        alert(res.message);
+        await fetchAll();
+      } catch (err) {
+        alert(`테스트 발행 실패: ${err.message}`);
+      }
+    };
+
     // ── 작업대상 포스트(캠페인) 삭제 ──
     const handleCampaignDelete = async (id) => {
       if (
@@ -1220,6 +1232,13 @@ const GenerateTab = React.memo(
                           </h4>
                         </div>
                         <div className="flex gap-1 shrink-0 ml-1.5">
+                          <button
+                            onClick={() => handleCampaignPublishNow(camp.id)}
+                            className="btn btn-xs btn-primary btn-outline cursor-pointer font-bold"
+                            title="즉시 1회 백그라운드 테스트 발행"
+                          >
+                            🚀 테스트
+                          </button>
                           <button
                             onClick={() => handleCampaignStatusToggle(camp.id, camp.status)}
                             className={`btn btn-xs cursor-pointer ${camp.status === 'active' ? 'btn-ghost border-base-300' : 'btn-success btn-outline'}`}
