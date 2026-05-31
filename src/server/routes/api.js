@@ -428,7 +428,7 @@ router.get('/posts/scheduled', (req, res) => {
 router.post('/posts/:id/retry', (req, res) => {
   const { id } = req.params;
   db.run(
-    "UPDATE posts SET status = 'scheduled', scheduled_at = datetime('now') WHERE id = ? AND user_id = ? AND status = 'failed'",
+    "UPDATE posts SET status = 'scheduled', scheduled_at = NULL WHERE id = ? AND user_id = ? AND status = 'failed'",
     [id, req.user.id],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
@@ -510,7 +510,7 @@ router.delete('/posts/:id', (req, res) => {
 router.post('/posts/:id/publish-now', (req, res) => {
   const { id } = req.params;
   db.run(
-    "UPDATE posts SET status = 'scheduled', scheduled_at = datetime('now') WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing', 'failed')",
+    "UPDATE posts SET status = 'scheduled', scheduled_at = NULL WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing', 'failed')",
     [id, req.user.id],
     (err) => {
       if (err) return res.status(500).json({ error: err.message });
