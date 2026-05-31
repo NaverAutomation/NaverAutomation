@@ -585,7 +585,7 @@ router.post('/post', async (req, res) => {
 
     const status = result.success ? 'published' : 'failed';
     db.run(
-      'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      "INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)",
       [req.user.id, account.id, title, content, image_url || null, headless ? 1 : 0, status],
     );
 
