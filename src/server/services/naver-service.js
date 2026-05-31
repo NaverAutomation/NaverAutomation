@@ -377,7 +377,8 @@ async function installPlaywrightChromium() {
   return new Promise((resolve, reject) => {
     try {
       const require = createRequire(import.meta.url);
-      const cliPath = require.resolve('playwright-core/cli.js');
+      const packageJsonPath = require.resolve('playwright-core/package.json');
+      const cliPath = path.join(path.dirname(packageJsonPath), 'cli.js');
 
       console.log(`Using Playwright CLI path: ${cliPath}`);
       console.log(`Using node executable: ${process.execPath}`);
