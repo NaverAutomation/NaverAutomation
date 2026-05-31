@@ -494,6 +494,26 @@ router.delete('/posts/scheduled/:id', (req, res) => {
   );
 });
 
+// PATCH /posts/scheduled/:id/time (예약 발행 시간 수정)
+router.patch('/posts/scheduled/:id/time', (req, res) => {
+  const { scheduled_at } = req.body;
+  if (!scheduled_at) {
+    return res.status(400).json({ error: '변경할 예약 시간이 필요합니다.' });
+  }
+
+  db.run(
+    "UPDATE posts SET scheduled_at = ?, status = 'scheduled' WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending')",
+    [scheduled_at, req.params.id, req.user.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      if (this.changes === 0) {
+        return res.status(404).json({ error: '수정 가능한 예약 포스트를 찾을 수 없습니다.' });
+      }
+      res.json({ success: true, message: '예약 시간이 수정되었습니다.' });
+    },
+  );
+});
+
 // DELETE /posts/:id (개별 발행 이력/로그 삭제)
 router.delete('/posts/:id', (req, res) => {
   db.run(

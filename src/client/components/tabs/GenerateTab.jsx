@@ -58,6 +58,10 @@ const GenerateTab = React.memo(
     const [newCampaign, setNewCampaign] = useState({ title: '', content: '', image_url: '' });
     const [campaignSubmitting, setCampaignSubmitting] = useState(false);
 
+    // ── 예약 수정 상태 ──
+    const [editingPostId, setEditingPostId] = useState(null);
+    const [editingTimeValue, setEditingTimeValue] = useState('');
+
     // ── 외부 이력 재사용 이벤트 감지 (대시보드 등에서 전달된 이벤트 포함) ──
     useEffect(() => {
       if (reusedPost) {
@@ -197,6 +201,15 @@ const GenerateTab = React.memo(
     const applyRandomOffset = (isoString, offsetMin) => {
       const offsetMs = (Math.random() * 2 - 1) * offsetMin * 60 * 1000;
       return new Date(new Date(isoString).getTime() + offsetMs).toISOString();
+    };
+
+    // ── UTC 시간을 로컬 datetime-local 포맷(YYYY-MM-DDTHH:MM)으로 변환 ──
+    const toLocalDateTimeString = (utcString) => {
+      if (!utcString) return '';
+      const date = new Date(utcString);
+      if (Number.isNaN(date.getTime())) return '';
+      const offset = date.getTimezoneOffset() * 60000;
+      return new Date(date.getTime() - offset).toISOString().slice(0, 16);
     };
 
     // ── AI 초안 타이머 예약 ──
@@ -396,6 +409,24 @@ const GenerateTab = React.memo(
         await fetchAll();
       } catch (err) {
         alert(`오류: ${err.message}`);
+      }
+    };
+
+    // ── 예약 발행 시간 수정 적용 ──
+    const handleUpdateScheduleTime = async (id) => {
+      if (!editingTimeValue) return alert('예약 시간을 입력하세요.');
+      try {
+        const utcTime = new Date(editingTimeValue).toISOString();
+        const res = await apiFetch(`/api/posts/scheduled/${id}/time`, {
+          method: 'PATCH',
+          body: JSON.stringify({ scheduled_at: utcTime }),
+        });
+        alert(res.message || '예약 시간이 성공적으로 변경되었습니다!');
+        setEditingPostId(null);
+        setEditingTimeValue('');
+        await fetchAll();
+      } catch (err) {
+        alert(`수정 실패: ${err.message}`);
       }
     };
 
@@ -1239,12 +1270,53 @@ const GenerateTab = React.memo(
                           {post.title}
                         </h4>
                         <div className="text-[11px] text-base-content/40 mt-1.5 font-semibold">
-                          {post.scheduled_at ? (
-                            <span className="text-warning">
-                              📅 {parseUtcDate(post.scheduled_at).toLocaleString('ko-KR')}
-                            </span>
+                          {editingPostId === post.id ? (
+                            <div className="flex items-center gap-2 mt-1">
+                              <input
+                                type="datetime-local"
+                                value={editingTimeValue}
+                                onChange={(e) => setEditingTimeValue(e.target.value)}
+                                className="input input-bordered input-xs bg-base-100 font-medium w-44"
+                              />
+                              <button
+                                onClick={() => handleUpdateScheduleTime(post.id)}
+                                className="btn btn-xs btn-primary font-bold cursor-pointer"
+                              >
+                                저장
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingPostId(null);
+                                  setEditingTimeValue('');
+                                }}
+                                className="btn btn-xs btn-ghost border-base-300 font-bold cursor-pointer"
+                              >
+                                취소
+                              </button>
+                            </div>
                           ) : (
-                            <span className="text-info">⏳ 스케줄러 기동 시 발행</span>
+                            <div className="flex items-center gap-1.5">
+                              {post.scheduled_at ? (
+                                <span className="text-warning">
+                                  📅 {parseUtcDate(post.scheduled_at).toLocaleString('ko-KR')}
+                                </span>
+                              ) : (
+                                <span className="text-info">⏳ 스케줄러 기동 시 발행</span>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setEditingPostId(post.id);
+                                  setEditingTimeValue(
+                                    toLocalDateTimeString(post.scheduled_at) ||
+                                      toLocalDateTimeString(new Date()),
+                                  );
+                                }}
+                                className="btn btn-xs btn-ghost btn-circle text-[10px] w-5 h-5 min-h-0 cursor-pointer border border-base-300 hover:bg-base-300"
+                                title="예약 시간 수정"
+                              >
+                                ✏️
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
