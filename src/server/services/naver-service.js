@@ -302,9 +302,30 @@ async function removeStrikethrough(page) {
 }
 
 /**
+ * [Helper] 태그 입력
+ */
+async function inputTags(page, tags) {
+  if (!tags || tags.length === 0) return;
+  console.log('Inputting tags...');
+  try {
+    const tagInput = page.locator('#tag-input');
+    await tagInput.waitFor({ state: 'visible', timeout: 5000 });
+    
+    for (const tag of tags) {
+      await tagInput.fill(tag);
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(200); // 태그 입력 대기
+    }
+    console.log('Tags input completed.');
+  } catch (e) {
+    console.warn('Tag input failed:', e.message);
+  }
+}
+
+/**
  * [Helper] 최종 발행 프로세스
  */
-async function publishPostAction(page) {
+async function publishPostAction(page, tags = []) {
   console.log('Publishing post...');
   await page.waitForTimeout(1000); // 렌더링 안정화
 
@@ -318,7 +339,11 @@ async function publishPostAction(page) {
   // 모달 애니메이션 대기
   await page.waitForTimeout(1000);
 
+  // 태그 입력
+  await inputTags(page, tags);
+
   // 2차 최종 발행 버튼 (팝업 내부)
+  // 발행 버튼 클릭 후 태그 입력이 끝나면 "발행" 버튼이 활성화됨
   const finalPublishSelectors = [
     'button[data-testid="seOnePublishBtn"]',
     'button[data-click-area="tpb*i.publish"]',
@@ -536,7 +561,7 @@ export async function postToNaver(account, post, options = {}) {
 
     // 8. 발행 처리
     if (onProgress) onProgress('info', '최종 발행 프로세스 진행 중...');
-    await publishPostAction(page);
+    await publishPostAction(page, post.tags);
 
     return { success: true, message: 'Successfully posted to Naver Blog' };
   } catch (error) {
