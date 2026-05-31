@@ -61,6 +61,7 @@ const GenerateTab = React.memo(
     // ── 예약 수정 상태 ──
     const [editingPostId, setEditingPostId] = useState(null);
     const [editingTimeValue, setEditingTimeValue] = useState('');
+    const [expandedPostIds, setExpandedPostIds] = useState({});
 
     // ── 외부 이력 재사용 이벤트 감지 (대시보드 등에서 전달된 이벤트 포함) ──
     useEffect(() => {
@@ -1232,13 +1233,15 @@ const GenerateTab = React.memo(
                           </h4>
                         </div>
                         <div className="flex gap-1 shrink-0 ml-1.5">
-                          <button
-                            onClick={() => handleCampaignPublishNow(camp.id)}
-                            className="btn btn-xs btn-primary btn-outline cursor-pointer font-bold"
-                            title="즉시 1회 백그라운드 테스트 발행"
-                          >
-                            🚀 테스트
-                          </button>
+                          {import.meta.env.DEV && (
+                            <button
+                              onClick={() => handleCampaignPublishNow(camp.id)}
+                              className="btn btn-xs btn-primary btn-outline cursor-pointer font-bold"
+                              title="즉시 1회 백그라운드 테스트 발행"
+                            >
+                              🚀 테스트
+                            </button>
+                          )}
                           <button
                             onClick={() => handleCampaignStatusToggle(camp.id, camp.status)}
                             className={`btn btn-xs cursor-pointer ${camp.status === 'active' ? 'btn-ghost border-base-300' : 'btn-success btn-outline'}`}
@@ -1284,85 +1287,104 @@ const GenerateTab = React.memo(
                   {scheduledPosts.map((post) => (
                     <div
                       key={post.id}
-                      className="p-3.5 bg-base-100 border border-base-300 rounded-xl shadow-sm flex items-center justify-between gap-3"
+                      className="p-3.5 bg-base-100 border border-base-300 rounded-xl shadow-sm flex flex-col gap-2.5"
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <StatusBadge status={post.status} />
-                          <span className="badge badge-neutral badge-xs font-mono font-bold opacity-60">
-                            {post.naver_id ? `@${post.naver_id}` : '🔄 자동'}
-                          </span>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <StatusBadge status={post.status} />
+                            <span className="badge badge-neutral badge-xs font-mono font-bold opacity-60">
+                              {post.naver_id ? `@${post.naver_id}` : '🔄 자동'}
+                            </span>
+                          </div>
+                          <h4 className="font-extrabold text-sm text-base-content truncate pr-1">
+                            {post.title}
+                          </h4>
+                          <div className="text-[11px] text-base-content/40 mt-1.5 font-semibold">
+                            {editingPostId === post.id ? (
+                              <div className="flex items-center gap-2 mt-1">
+                                <input
+                                  type="datetime-local"
+                                  value={editingTimeValue}
+                                  onChange={(e) => setEditingTimeValue(e.target.value)}
+                                  className="input input-bordered input-xs bg-base-100 font-medium w-44"
+                                />
+                                <button
+                                  onClick={() => handleUpdateScheduleTime(post.id)}
+                                  className="btn btn-xs btn-primary font-bold cursor-pointer"
+                                >
+                                  저장
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingPostId(null);
+                                    setEditingTimeValue('');
+                                  }}
+                                  className="btn btn-xs btn-ghost border-base-300 font-bold cursor-pointer"
+                                >
+                                  취소
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                {post.scheduled_at ? (
+                                  <span className="text-warning">
+                                    📅 {parseUtcDate(post.scheduled_at).toLocaleString('ko-KR')}
+                                  </span>
+                                ) : (
+                                  <span className="text-info">⏳ 스케줄러 기동 시 발행</span>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    setEditingPostId(post.id);
+                                    setEditingTimeValue(
+                                      toLocalDateTimeString(post.scheduled_at) ||
+                                        toLocalDateTimeString(new Date()),
+                                    );
+                                  }}
+                                  className="btn btn-xs btn-ghost btn-circle text-[10px] w-5 h-5 min-h-0 cursor-pointer border border-base-300 hover:bg-base-300"
+                                  title="예약 시간 수정"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    setExpandedPostIds((prev) => ({
+                                      ...prev,
+                                      [post.id]: !prev[post.id],
+                                    }))
+                                  }
+                                  className="btn btn-xs btn-ghost btn-circle text-[10px] w-5 h-5 min-h-0 cursor-pointer border border-base-300 hover:bg-base-300"
+                                  title={expandedPostIds[post.id] ? '본문 숨기기' : '본문 보기'}
+                                >
+                                  {expandedPostIds[post.id] ? '🔼' : '🔍'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <h4 className="font-extrabold text-sm text-base-content truncate pr-1">
-                          {post.title}
-                        </h4>
-                        <div className="text-[11px] text-base-content/40 mt-1.5 font-semibold">
-                          {editingPostId === post.id ? (
-                            <div className="flex items-center gap-2 mt-1">
-                              <input
-                                type="datetime-local"
-                                value={editingTimeValue}
-                                onChange={(e) => setEditingTimeValue(e.target.value)}
-                                className="input input-bordered input-xs bg-base-100 font-medium w-44"
-                              />
-                              <button
-                                onClick={() => handleUpdateScheduleTime(post.id)}
-                                className="btn btn-xs btn-primary font-bold cursor-pointer"
-                              >
-                                저장
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingPostId(null);
-                                  setEditingTimeValue('');
-                                }}
-                                className="btn btn-xs btn-ghost border-base-300 font-bold cursor-pointer"
-                              >
-                                취소
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1.5">
-                              {post.scheduled_at ? (
-                                <span className="text-warning">
-                                  📅 {parseUtcDate(post.scheduled_at).toLocaleString('ko-KR')}
-                                </span>
-                              ) : (
-                                <span className="text-info">⏳ 스케줄러 기동 시 발행</span>
-                              )}
-                              <button
-                                onClick={() => {
-                                  setEditingPostId(post.id);
-                                  setEditingTimeValue(
-                                    toLocalDateTimeString(post.scheduled_at) ||
-                                      toLocalDateTimeString(new Date()),
-                                  );
-                                }}
-                                className="btn btn-xs btn-ghost btn-circle text-[10px] w-5 h-5 min-h-0 cursor-pointer border border-base-300 hover:bg-base-300"
-                                title="예약 시간 수정"
-                              >
-                                ✏️
-                              </button>
-                            </div>
-                          )}
+                        <div className="flex flex-col gap-1 shrink-0">
+                          <button
+                            onClick={() => handlePublishNow(post.id)}
+                            className="btn btn-xs btn-success btn-outline font-bold cursor-pointer"
+                            title="즉시 강제발행"
+                          >
+                            🚀 발행
+                          </button>
+                          <button
+                            onClick={() => handleCancelSchedule(post.id)}
+                            className="btn btn-xs btn-error btn-outline font-bold cursor-pointer"
+                            title="취소"
+                          >
+                            ✕
+                          </button>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-1 shrink-0">
-                        <button
-                          onClick={() => handlePublishNow(post.id)}
-                          className="btn btn-xs btn-success btn-outline font-bold cursor-pointer"
-                          title="즉시 강제발행"
-                        >
-                          🚀 발행
-                        </button>
-                        <button
-                          onClick={() => handleCancelSchedule(post.id)}
-                          className="btn btn-xs btn-error btn-outline font-bold cursor-pointer"
-                          title="취소"
-                        >
-                          ✕
-                        </button>
-                      </div>
+                      {expandedPostIds[post.id] && post.content && (
+                        <div className="text-xs text-base-content/75 bg-base-200/50 p-2.5 rounded-lg max-h-40 overflow-y-auto leading-relaxed font-medium whitespace-pre-wrap border border-base-300/40 animate-in slide-in-from-top-1 duration-150">
+                          {post.content}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
