@@ -310,11 +310,23 @@ router.post('/campaigns', (req, res) => {
       if (err) return res.status(500).json({ error: err.message });
       const campaignId = this.lastID;
 
+      emitLog(
+        'info',
+        `[24/7 자동화] 새 대상포스트 등록 완료: "${title}" (ID: ${campaignId})`,
+        req.user.id,
+      );
+
       if (!getSchedulerStatus().isRunning) {
         startScheduler();
+        emitLog('info', '[24/7 자동화] 스케줄러가 기동되었습니다.', req.user.id);
       }
 
       // 등록 즉시 첫 글 1회 백그라운드 발행 시작
+      emitLog(
+        'info',
+        `[24/7 자동화] "${title}" 첫 포스팅을 즉시 백그라운드에서 시작합니다.`,
+        req.user.id,
+      );
       db.get('SELECT * FROM campaigns WHERE id = ?', [campaignId], (err, row) => {
         if (!err && row) {
           performTask(row);
