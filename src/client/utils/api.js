@@ -28,3 +28,16 @@ export async function apiFetch(url, options = {}) {
   if (!res.ok) throw new Error(data.error || '서버 오류');
   return data;
 }
+
+export function parseUtcDate(dateStr) {
+  if (!dateStr) return null;
+  if (typeof dateStr === 'string') {
+    const hasTimezone =
+      dateStr.includes('Z') || dateStr.includes('+') || dateStr.lastIndexOf('-') > 10;
+    if (!hasTimezone) {
+      const formatted = `${dateStr.trim().replace(' ', 'T')}Z`;
+      return new Date(formatted);
+    }
+  }
+  return new Date(dateStr);
+}

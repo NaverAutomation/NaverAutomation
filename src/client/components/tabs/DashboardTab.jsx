@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, parseUtcDate } from '../../utils/api';
 import { Btn, Card, Modal, SectionTitle, StatusBadge } from '../common';
 
 const DashboardTab = React.memo(
@@ -109,7 +109,7 @@ const DashboardTab = React.memo(
                     className={`text-xs font-mono p-2 rounded bg-base-100/50 border border-base-300 ${log.level === 'error' ? 'text-error' : log.level === 'success' ? 'text-success' : 'text-base-content/70'}`}
                   >
                     <span className="mr-3 text-base-content/40">
-                      {new Date(log.created_at).toLocaleTimeString()}
+                      {parseUtcDate(log.created_at).toLocaleTimeString()}
                     </span>
                     {log.message}
                   </div>
@@ -151,7 +151,7 @@ const DashboardTab = React.memo(
                         <StatusBadge status={p.status} />
                       </td>
                       <td className="text-base-content/50 font-medium text-xs">
-                        {p.created_at ? new Date(p.created_at).toLocaleString('ko-KR') : '-'}
+                        {p.created_at ? parseUtcDate(p.created_at).toLocaleString('ko-KR') : '-'}
                       </td>
                       <td>
                         <div className="flex justify-center gap-2">

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { apiFetch } from '../../utils/api';
+import { apiFetch, parseUtcDate } from '../../utils/api';
 import { Btn, Card, Input, SectionTitle, StatusBadge, Textarea } from '../common';
 
 const GenerateTab = React.memo(
@@ -1173,7 +1173,7 @@ const GenerateTab = React.memo(
                           <div className="flex items-center gap-2 mb-1">
                             <StatusBadge status={camp.status} />
                             <span className="text-[10px] text-base-content/40 font-semibold">
-                              {new Date(camp.created_at).toLocaleDateString()}
+                              {parseUtcDate(camp.created_at).toLocaleDateString()}
                             </span>
                           </div>
                           <h4 className="font-extrabold text-sm text-base-content truncate pr-2">
@@ -1241,7 +1241,7 @@ const GenerateTab = React.memo(
                         <div className="text-[11px] text-base-content/40 mt-1.5 font-semibold">
                           {post.scheduled_at ? (
                             <span className="text-warning">
-                              📅 {new Date(post.scheduled_at).toLocaleString('ko-KR')}
+                              📅 {parseUtcDate(post.scheduled_at).toLocaleString('ko-KR')}
                             </span>
                           ) : (
                             <span className="text-info">⏳ 스케줄러 기동 시 발행</span>
@@ -1334,7 +1334,7 @@ const GenerateTab = React.memo(
                         </div>
                       </div>
                       <div className="text-[10px] text-base-content/40 font-semibold">
-                        <span>{new Date(post.created_at).toLocaleString('ko-KR')}</span>
+                        <span>{parseUtcDate(post.created_at).toLocaleString('ko-KR')}</span>
                       </div>
                     </div>
                   ))}
