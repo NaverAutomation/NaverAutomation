@@ -769,7 +769,9 @@ const GenerateTab = React.memo(
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div
+                      className={`grid grid-cols-1 ${import.meta.env.DEV ? 'sm:grid-cols-2' : ''} gap-4`}
+                    >
                       <div>
                         <label className="label-text font-bold block mb-2 text-base-content/80">
                           📅 예약 발행시간 설정
@@ -808,24 +810,26 @@ const GenerateTab = React.memo(
                           </span>
                         </div>
                       </div>
-                      <div>
-                        <label className="label-text font-bold block mb-2 text-base-content/80">
-                          🖥️ 브라우저 실행 방식
-                        </label>
-                        <div className="form-control bg-base-100 p-2.5 rounded-lg border border-base-300 shadow-inner h-[3rem] flex justify-center">
-                          <label className="label cursor-pointer justify-start gap-4 py-0">
-                            <input
-                              type="checkbox"
-                              className="toggle toggle-primary toggle-sm"
-                              checked={manualHeadless}
-                              onChange={(e) => setManualHeadless(e.target.checked)}
-                            />
-                            <span className="label-text font-bold">
-                              백그라운드(headless)로 자동 실행
-                            </span>
+                      {import.meta.env.DEV && (
+                        <div>
+                          <label className="label-text font-bold block mb-2 text-base-content/80">
+                            🖥️ 브라우저 실행 방식
                           </label>
+                          <div className="form-control bg-base-100 p-2.5 rounded-lg border border-base-300 shadow-inner h-[3rem] flex justify-center">
+                            <label className="label cursor-pointer justify-start gap-4 py-0">
+                              <input
+                                type="checkbox"
+                                className="toggle toggle-primary toggle-sm"
+                                checked={manualHeadless}
+                                onChange={(e) => setManualHeadless(e.target.checked)}
+                              />
+                              <span className="label-text font-bold">
+                                백그라운드(headless)로 자동 실행
+                              </span>
+                            </label>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     <div className="flex flex-col w-full mt-2">
@@ -982,7 +986,9 @@ const GenerateTab = React.memo(
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div
+                    className={`grid grid-cols-1 ${import.meta.env.DEV ? 'sm:grid-cols-2' : ''} gap-4`}
+                  >
                     <div>
                       <label className="label-text font-bold block mb-2 text-base-content/80">
                         📅 예약 발행시간 설정
@@ -1019,24 +1025,26 @@ const GenerateTab = React.memo(
                         <span className="text-xs text-base-content/50 font-semibold">분 랜덤</span>
                       </div>
                     </div>
-                    <div>
-                      <label className="label-text font-bold block mb-2 text-base-content/80">
-                        🖥️ 브라우저 실행 방식
-                      </label>
-                      <div className="form-control bg-base-100 p-2.5 rounded-lg border border-base-300 shadow-inner h-[3rem] flex justify-center">
-                        <label className="label cursor-pointer justify-start gap-4 py-0">
-                          <input
-                            type="checkbox"
-                            className="toggle toggle-primary toggle-sm"
-                            checked={headless}
-                            onChange={(e) => setHeadless(e.target.checked)}
-                          />
-                          <span className="label-text font-bold">
-                            백그라운드(headless)로 자동 실행
-                          </span>
+                    {import.meta.env.DEV && (
+                      <div>
+                        <label className="label-text font-bold block mb-2 text-base-content/80">
+                          🖥️ 브라우저 실행 방식
                         </label>
+                        <div className="form-control bg-base-100 p-2.5 rounded-lg border border-base-300 shadow-inner h-[3rem] flex justify-center">
+                          <label className="label cursor-pointer justify-start gap-4 py-0">
+                            <input
+                              type="checkbox"
+                              className="toggle toggle-primary toggle-sm"
+                              checked={headless}
+                              onChange={(e) => setHeadless(e.target.checked)}
+                            />
+                            <span className="label-text font-bold">
+                              백그라운드(headless)로 자동 실행
+                            </span>
+                          </label>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   <div className="flex flex-col w-full mt-2">
