@@ -180,32 +180,88 @@ async function performTask(campaign) {
   }
 }
 
-/**
- * 전체 스케줄링 메인 루프
- */
 export async function processAutomation() {
   if (!isRunning) return;
   if (activeWorkers >= MAX_WORKERS) return;
 
-  // 활성화된 캠페인 가져오기 (랜덤하게 섞어서 유저간 공평성 유지)
-  db.all(
-    "SELECT * FROM campaigns WHERE status = 'active' ORDER BY RANDOM()",
-    [],
-    async (err, campaigns) => {
-      if (err) {
-        emitLog('error', `캠페인 로드 실패: ${err.message}`);
-        return;
+  // 활성화된 캠페인 가져오기
+  db.all("SELECT * FROM campaigns WHERE status = 'active'", [], async (err, campaigns) => {
+    if (err) {
+      emitLog('error', `캠페인 로드 실패: ${err.message}`);
+      return;
+    }
+
+    if (!campaigns || campaigns.length === 0) return;
+
+    // 유저별로 캠페인 그룹화 (유저별 일일 한도 및 간격을 각각 체크)
+    const userCampaigns = {};
+    campaigns.forEach((c) => {
+      if (!userCampaigns[c.user_id]) userCampaigns[c.user_id] = [];
+      userCampaigns[c.user_id].push(c);
+    });
+
+    for (const userId of Object.keys(userCampaigns)) {
+      if (activeWorkers >= MAX_WORKERS) break;
+      if (!isRunning) break;
+
+      // A. 오늘 이미 발행 완료된 이 유저의 캠페인 수 조회 (scheduled_at IS NULL인 포스트)
+      const count = await new Promise((resolve) => {
+        db.get(
+          `SELECT COUNT(*) as count FROM posts 
+             WHERE user_id = ? 
+               AND status = 'published' 
+               AND scheduled_at IS NULL 
+               AND date(created_at) = date('now')`,
+          [userId],
+          (_err, row) => {
+            resolve(row ? row.count : 0);
+          },
+        );
+      });
+
+      if (count >= 5) {
+        // 일일 최대 발행 수 5개 제한 도달
+        continue;
       }
 
-      for (const campaign of campaigns) {
-        if (activeWorkers >= MAX_WORKERS) break;
-        if (!isRunning) break;
+      // B. 가장 최근에 성공한 이 유저의 캠페인 포스트의 발행 시간 조회
+      const lastCampaignPost = await new Promise((resolve) => {
+        db.get(
+          `SELECT created_at FROM posts 
+             WHERE user_id = ? 
+               AND status = 'published' 
+               AND scheduled_at IS NULL 
+             ORDER BY id DESC LIMIT 1`,
+          [userId],
+          (_err, row) => {
+            resolve(row || null);
+          },
+        );
+      });
 
-        // 비동기로 워커 실행 (기다리지 않음)
-        performTask(campaign);
+      if (lastCampaignPost) {
+        // SQLite의 UTC 문자열을 로컬 밀리초 단위 타임스탬프로 해석
+        const lastTime = new Date(`${lastCampaignPost.created_at.replace(' ', 'T')}Z`).getTime();
+        const nowTime = Date.now();
+
+        // 일일 5개 제한 분배: 24시간 / 5 = 4.8시간 = 288분
+        // 발행 시 특정 시간이 아닌 5분 ~ 10분 정도의 랜덤 오차 추가
+        const randomOffsetMinutes = 5 + Math.random() * 5; // 5분 ~ 10분 오차
+        const minIntervalMs = (288 + randomOffsetMinutes) * 60 * 1000;
+
+        if (nowTime - lastTime < minIntervalMs) {
+          // 주기 미달
+          continue;
+        }
       }
-    },
-  );
+
+      // C. 모든 조건이 충족되면 활성 캠페인 중 무작위로 1개를 선택하여 발행
+      const list = userCampaigns[userId];
+      const selectedCampaign = list[Math.floor(Math.random() * list.length)];
+
+      performTask(selectedCampaign);
+    }
+  });
 }
 
 /**

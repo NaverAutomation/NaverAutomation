@@ -409,7 +409,14 @@ router.post('/posts/schedule', (req, res) => {
   const { account_id, title, content, image_url, scheduled_at, headless } = req.body;
   if (!title || !content) return res.status(400).json({ error: '제목과 내용은 필수입니다.' });
 
-  const status = scheduled_at ? 'scheduled' : 'pending';
+  // 5분 ~ 10분 사이의 랜덤한 오차(300,000ms ~ 600,000ms) 추가 적용
+  let finalScheduledAt = scheduled_at;
+  if (scheduled_at) {
+    const randomOffsetMs = 300000 + Math.random() * 300000;
+    finalScheduledAt = new Date(new Date(scheduled_at).getTime() + randomOffsetMs).toISOString();
+  }
+
+  const status = finalScheduledAt ? 'scheduled' : 'pending';
   const sql =
     'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
   db.run(
@@ -421,7 +428,7 @@ router.post('/posts/schedule', (req, res) => {
       content,
       image_url || null,
       headless ? 1 : 0,
-      scheduled_at || null,
+      finalScheduledAt || null,
       status,
     ],
     function (err) {
