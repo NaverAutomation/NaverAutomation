@@ -321,8 +321,6 @@ const App = () => {
             <GenerateTab
               accounts={accounts}
               campaigns={campaigns}
-              scheduledPosts={scheduledPosts}
-              posts={posts}
               fetchAll={fetchAll}
               reusedPost={reusedPost}
               clearReusedPost={() => setReusedPost(null)}
