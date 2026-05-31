@@ -21,6 +21,17 @@ const DashboardTab = React.memo(
       setRetrying(false);
     };
 
+    const handleDeletePost = async (postId) => {
+      if (!confirm('이 발행 기록을 삭제하시겠습니까? (블로그 포스팅 자체는 삭제되지 않습니다.)'))
+        return;
+      try {
+        await apiFetch(`/api/posts/${postId}`, { method: 'DELETE' });
+        await fetchAll();
+      } catch (err) {
+        alert(`오류: ${err.message}`);
+      }
+    };
+
     const activeAccounts = accounts.filter((a) => a.status === 'active').length;
     const published = posts.filter((p) => p.status === 'published').length;
     const failed = posts.filter((p) => p.status === 'failed').length;
@@ -159,6 +170,13 @@ const DashboardTab = React.memo(
                               🔄 재시도
                             </button>
                           )}
+                          <button
+                            onClick={() => handleDeletePost(p.id)}
+                            className="btn btn-xs btn-error btn-outline shadow-sm font-semibold"
+                            title="기록 삭제"
+                          >
+                            🗑
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -217,6 +235,15 @@ const DashboardTab = React.memo(
                         🔄 다시 발행하기
                       </Btn>
                     )}
+                    <Btn
+                      variant="error"
+                      onClick={() => {
+                        handleDeletePost(selectedPost.id);
+                        setSelectedPost(null);
+                      }}
+                    >
+                      🗑 삭제하기
+                    </Btn>
                     <Btn variant="secondary" onClick={() => setSelectedPost(null)}>
                       닫기
                     </Btn>

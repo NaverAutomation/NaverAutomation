@@ -203,17 +203,6 @@ const App = () => {
     }
   }, [manualUpdateRequested, updaterState.status]);
 
-  // ── 핸들러
-  const handleTaskToggle = async () => {
-    try {
-      const endpoint = taskStatus.isRunning ? '/api/task/stop' : '/api/task/start';
-      const data = await apiFetch(endpoint, { method: 'POST' });
-      setTaskStatus(data.status);
-    } catch (err) {
-      alert(`오류: ${err.message}`);
-    }
-  };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
@@ -265,22 +254,6 @@ const App = () => {
           </div>
         </div>
         <div className="flex-none gap-3 sm:gap-6">
-          <div className="hidden sm:flex items-center gap-2 badge badge-outline badge-lg px-4 py-4 bg-base-200 border-base-100 shadow-inner">
-            <span
-              className={`w-3 h-3 rounded-full ${taskStatus.isRunning ? 'bg-success shadow-[0_0_8px_#22c55e] animate-pulse' : 'bg-error'}`}
-            />
-            <span className="font-bold text-sm tracking-wide">
-              {taskStatus.isRunning
-                ? `스케줄러 실행 중 (${taskStatus.activeWorkers}/${taskStatus.maxWorkers})`
-                : '스케줄러 정지'}
-            </span>
-          </div>
-          <button
-            onClick={handleTaskToggle}
-            className={`btn shadow-sm hover:scale-[1.02] transition-transform ${taskStatus.isRunning ? 'btn-error' : 'btn-success'}`}
-          >
-            {taskStatus.isRunning ? '⏹ 작업 정지' : '▶ 작업 시작'}
-          </button>
           <button
             onClick={handleLogout}
             className="btn btn-ghost btn-sm sm:btn-md"

@@ -347,13 +347,10 @@ router.delete('/campaigns/:id', (req, res) => {
 // POSTS
 // ─────────────────────────────────────────────
 
-/**
- * 유저의 published 발행이력을 최근 10개만 남기고 삭제
- */
 function cleanupOldPublishedPosts(userId) {
   db.run(
     `DELETE FROM posts WHERE user_id = ? AND status = 'published' AND id NOT IN (
-      SELECT id FROM posts WHERE user_id = ? AND status = 'published' ORDER BY id DESC LIMIT 10
+      SELECT id FROM posts WHERE user_id = ? AND status = 'published' ORDER BY id DESC LIMIT 50
     )`,
     [userId, userId],
     (err) => {
@@ -445,6 +442,18 @@ router.delete('/posts/scheduled/:id', (req, res) => {
     (err) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ success: true });
+    },
+  );
+});
+
+// DELETE /posts/:id (개별 발행 이력/로그 삭제)
+router.delete('/posts/:id', (req, res) => {
+  db.run(
+    'DELETE FROM posts WHERE id = ? AND user_id = ?',
+    [req.params.id, req.user.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, changes: this.changes });
     },
   );
 });

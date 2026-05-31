@@ -5,13 +5,10 @@ import { getCachedGlobalSetting, getGlobalSetting } from '../utils/supabase.js';
 import { generateRewriteWithGemini } from './ai-service.js';
 import { postToNaver } from './naver-service.js';
 
-/**
- * 유저의 published 발행이력을 최근 10개만 남기고 삭제
- */
 function cleanupOldPublishedPosts(userId) {
   db.run(
     `DELETE FROM posts WHERE user_id = ? AND status = 'published' AND id NOT IN (
-      SELECT id FROM posts WHERE user_id = ? AND status = 'published' ORDER BY id DESC LIMIT 10
+      SELECT id FROM posts WHERE user_id = ? AND status = 'published' ORDER BY id DESC LIMIT 50
     )`,
     [userId, userId],
     (err) => {

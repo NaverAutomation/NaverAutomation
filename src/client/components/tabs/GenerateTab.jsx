@@ -434,6 +434,22 @@ const GenerateTab = React.memo(
       }
     };
 
+    // ── 최근 발행 이력 개별 삭제 ──
+    const handleDeleteHistoryPost = async (id) => {
+      if (
+        !window.confirm(
+          '이 발행 기록을 삭제하시겠습니까? (블로그 포스팅 자체는 삭제되지 않습니다.)',
+        )
+      )
+        return;
+      try {
+        await apiFetch(`/api/posts/${id}`, { method: 'DELETE' });
+        await fetchAll();
+      } catch (err) {
+        alert(`삭제 실패: ${err.message}`);
+      }
+    };
+
     return (
       <div className="flex flex-col gap-6">
         {/* ── 1. 상단 실시간 통합 현황판 (Stat Cards) ── */}
@@ -1307,6 +1323,13 @@ const GenerateTab = React.memo(
                             title="대기열에 그대로 재예약"
                           >
                             📅 예약
+                          </button>
+                          <button
+                            onClick={() => handleDeleteHistoryPost(post.id)}
+                            className="btn btn-xs btn-error btn-outline font-bold cursor-pointer"
+                            title="발행 기록 삭제"
+                          >
+                            🗑 삭제
                           </button>
                         </div>
                       </div>
