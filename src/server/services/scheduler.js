@@ -101,7 +101,7 @@ export async function getAvailableAccount(userId) {
 /**
  * 단일 워커 작업 프로세스
  */
-async function performTask(campaign) {
+export async function performTask(campaign) {
   activeWorkers++;
   emitTaskStatus();
 

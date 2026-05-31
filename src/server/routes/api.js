@@ -10,6 +10,7 @@ import {
   emitLog,
   getAvailableAccount,
   getSchedulerStatus,
+  performTask,
   processScheduledPosts,
   startScheduler,
   stopScheduler,
@@ -307,10 +308,20 @@ router.post('/campaigns', (req, res) => {
     [req.user.id, title, content, image_url || null],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
+      const campaignId = this.lastID;
+
       if (!getSchedulerStatus().isRunning) {
         startScheduler();
       }
-      res.json({ id: this.lastID, success: true });
+
+      // 등록 즉시 첫 글 1회 백그라운드 발행 시작
+      db.get('SELECT * FROM campaigns WHERE id = ?', [campaignId], (err, row) => {
+        if (!err && row) {
+          performTask(row);
+        }
+      });
+
+      res.json({ id: campaignId, success: true });
     },
   );
 });
@@ -367,6 +378,36 @@ router.get('/posts', (req, res) => {
     (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json(rows);
+    },
+  );
+});
+
+// DELETE /posts (전체 발행 이력 삭제 - 예약 및 대기 포스트 제외)
+router.delete('/posts', (req, res) => {
+  db.run(
+    "DELETE FROM posts WHERE user_id = ? AND status IN ('published', 'failed')",
+    [req.user.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, changes: this.changes });
+    },
+  );
+});
+
+// POST /posts/batch-delete (선택한 발행 이력 다중 삭제)
+router.post('/posts/batch-delete', (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: '삭제할 ID 배열이 필요합니다.' });
+  }
+
+  const placeholders = ids.map(() => '?').join(',');
+  db.run(
+    `DELETE FROM posts WHERE id IN (${placeholders}) AND user_id = ? AND status IN ('published', 'failed')`,
+    [...ids, req.user.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, changes: this.changes });
     },
   );
 });

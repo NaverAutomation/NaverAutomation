@@ -6,6 +6,50 @@ const DashboardTab = React.memo(
   ({ accounts, posts, scheduledPosts, taskStatus, realtimeLogs, fetchAll }) => {
     const [selectedPost, setSelectedPost] = useState(null);
     const [retrying, setRetrying] = useState(false);
+    const [selectedIds, setSelectedIds] = useState([]);
+
+    const handleDeleteAll = async () => {
+      if (
+        !window.confirm(
+          '경고: 완료 및 실패한 모든 발행 기록을 일괄 삭제하시겠습니까? (예약 대기열은 유지됩니다)',
+        )
+      )
+        return;
+      try {
+        await apiFetch('/api/posts', { method: 'DELETE' });
+        setSelectedIds([]);
+        await fetchAll();
+      } catch (err) {
+        alert(`오류: ${err.message}`);
+      }
+    };
+
+    const handleDeleteSelected = async () => {
+      if (selectedIds.length === 0) return alert('선택된 항목이 없습니다.');
+      if (!confirm(`선택한 ${selectedIds.length}개의 발행 기록을 삭제하시겠습니까?`)) return;
+      try {
+        await apiFetch('/api/posts/batch-delete', {
+          method: 'POST',
+          body: JSON.stringify({ ids: selectedIds }),
+        });
+        setSelectedIds([]);
+        await fetchAll();
+      } catch (err) {
+        alert(`오류: ${err.message}`);
+      }
+    };
+
+    const handleSelectAllToggle = () => {
+      if (selectedIds.length === posts.length) {
+        setSelectedIds([]);
+      } else {
+        setSelectedIds(posts.map((p) => p.id));
+      }
+    };
+
+    const handleSelectToggle = (id) => {
+      setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    };
 
     const handleRetry = async (postId) => {
       if (!confirm('이 포스트를 재발행하시겠습니까?')) return;
@@ -126,11 +170,38 @@ const DashboardTab = React.memo(
         {/* 최근 발행 */}
         {posts.length > 0 && (
           <Card>
-            <SectionTitle>📰 최근 발행 현황</SectionTitle>
+            <div className="flex justify-between items-center mb-4 pb-2 border-b border-base-300">
+              <SectionTitle className="!mb-0">📰 최근 발행 현황</SectionTitle>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleDeleteSelected}
+                  disabled={selectedIds.length === 0}
+                  className="btn btn-xs btn-warning font-semibold cursor-pointer shadow-sm"
+                >
+                  🗑 선택 삭제 ({selectedIds.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteAll}
+                  className="btn btn-xs btn-error font-semibold cursor-pointer shadow-sm"
+                >
+                  💥 전체 비우기
+                </button>
+              </div>
+            </div>
             <div className="overflow-x-auto rounded-xl border border-base-300">
               <table className="table table-zebra w-full text-sm">
                 <thead className="bg-base-300 text-base-content uppercase tracking-wider font-bold">
                   <tr>
+                    <th className="py-4 pl-4 w-12 text-center">
+                      <input
+                        type="checkbox"
+                        className="checkbox checkbox-primary checkbox-sm cursor-pointer"
+                        checked={posts.length > 0 && selectedIds.length === posts.length}
+                        onChange={handleSelectAllToggle}
+                      />
+                    </th>
                     <th className="py-4">계정</th>
                     <th className="py-4">제목</th>
                     <th className="py-4">상태</th>
@@ -139,8 +210,16 @@ const DashboardTab = React.memo(
                   </tr>
                 </thead>
                 <tbody className="bg-base-200">
-                  {posts.slice(0, 5).map((p) => (
+                  {posts.map((p) => (
                     <tr key={p.id} className="hover">
+                      <td className="py-4 pl-4 text-center">
+                        <input
+                          type="checkbox"
+                          className="checkbox checkbox-primary checkbox-sm cursor-pointer"
+                          checked={selectedIds.includes(p.id)}
+                          onChange={() => handleSelectToggle(p.id)}
+                        />
+                      </td>
                       <td className="font-semibold text-base-content/70">
                         {p.naver_id || p.account_id}
                       </td>
