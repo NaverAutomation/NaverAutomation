@@ -420,10 +420,12 @@ async function installPlaywrightChromium() {
  * 네이버 블로그 포스팅 메인 함수
  * @param {object} account 네이버 계정 정보 (naver_id, naver_pw)
  * @param {object} post 포스팅 내용 (title, content, image_url)
- * @param {object} options 실행 옵션 (headless)
+ * @param {object} options 실행 옵션 (headless, onProgress)
  */
 export async function postToNaver(account, post, options = {}) {
   let browser;
+  const { onProgress } = options;
+
   try {
     let effectiveHeadless =
       typeof options.headless === 'boolean' ? options.headless : CONFIG.HEADLESS;
@@ -434,6 +436,8 @@ export async function postToNaver(account, post, options = {}) {
       console.log('[Dev Mode] Auto-disabling headless mode to display browser window.');
       effectiveHeadless = false;
     }
+
+    if (onProgress) onProgress('info', '브라우저를 실행하는 중...');
 
     try {
       browser = await chromium.launch({
@@ -449,6 +453,7 @@ export async function postToNaver(account, post, options = {}) {
         launchError?.message?.includes("Executable doesn't exist") ||
         launchError?.message?.includes('looks like Playwright was upgraded')
       ) {
+        if (onProgress) onProgress('info', '브라우저 엔진 설치 시도 중...');
         console.log(
           'Chromium launch failed. Attempting to install Playwright Chromium automatically...',
         );
@@ -486,9 +491,11 @@ export async function postToNaver(account, post, options = {}) {
     const page = await context.newPage();
 
     // 1. 로그인
+    if (onProgress) onProgress('info', '네이버 로그인 시도 중...');
     await loginToNaver(page, account);
 
     // 2. 글쓰기 에디터 진입
+    if (onProgress) onProgress('info', '블로그 글쓰기 페이지 진입 중...');
     console.log(`Navigating to blog write page for ${account.naver_id}...`);
     await page.goto(`https://blog.naver.com/${account.naver_id}/postwrite`, {
       waitUntil: 'domcontentloaded',
@@ -507,21 +514,28 @@ export async function postToNaver(account, post, options = {}) {
     }
 
     // 3. 에디터 팝업 정리
+    if (onProgress) onProgress('info', '에디터 방해 팝업 제거 중...');
     await closeEditorPopups(page);
 
     // 4. 제목 입력
+    if (onProgress) onProgress('info', '제목 작성 중...');
     await fillEditorTitle(page, post.title);
 
     // 5. 이미지 업로드
-    await uploadImageToEditor(page, post.image_url);
+    if (post.image_url) {
+      if (onProgress) onProgress('info', '이미지 업로드 중...');
+      await uploadImageToEditor(page, post.image_url);
+    }
 
     // 6. 본문 입력
+    if (onProgress) onProgress('info', '본문 내용 작성 중...');
     await fillEditorContent(page, post.content);
 
     // 7. 의도치 않은 서식 제거
     await removeStrikethrough(page);
 
     // 8. 발행 처리
+    if (onProgress) onProgress('info', '최종 발행 프로세스 진행 중...');
     await publishPostAction(page);
 
     return { success: true, message: 'Successfully posted to Naver Blog' };

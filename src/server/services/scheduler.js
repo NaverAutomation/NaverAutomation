@@ -71,7 +71,7 @@ function emitTaskStatus() {
 }
 
 /**
- * 유저별 사용 가능한 계정 조회 (1일 3회 한도 체크 포함)
+ * 유저별 사용 가능한 계정 조회 (1일 15회 한도 체크 포함)
  */
 export async function getAvailableAccount(userId) {
   const today = new Date().toISOString().split('T')[0];
@@ -86,7 +86,7 @@ export async function getAvailableAccount(userId) {
 
         // 2. 한도가 남은 계정 중 가장 오랫동안 안 쓴 계정 선택
         db.get(
-          "SELECT * FROM accounts WHERE user_id = ? AND status = 'active' AND daily_post_count < 10 ORDER BY round_robin_order ASC LIMIT 1",
+          "SELECT * FROM accounts WHERE user_id = ? AND status = 'active' AND daily_post_count < 15 ORDER BY round_robin_order ASC LIMIT 1",
           [userId],
           (err, row) => {
             if (err) return reject(err);
@@ -110,7 +110,7 @@ export async function performTask(campaign) {
     // 1. 계정 선택
     const account = await getAvailableAccount(userId);
     if (!account) {
-      emitLog('warn', `활성화된 계정 중 오늘 포스팅 한도(3회)가 남은 계정이 없습니다.`, userId);
+      emitLog('warn', `활성화된 계정 중 오늘 포스팅 한도(15회)가 남은 계정이 없습니다.`, userId);
       return;
     }
 
@@ -147,7 +147,10 @@ export async function performTask(campaign) {
         content: aiResult.content,
         image_url: campaign.image_url,
       },
-      { headless: CONFIG.HEADLESS },
+      { 
+        headless: CONFIG.HEADLESS,
+        onProgress: (level, msg) => emitLog(level, msg, userId)
+      },
     );
 
     if (postResult.success) {
@@ -219,8 +222,8 @@ export async function processAutomation() {
         );
       });
 
-      if (count >= 5) {
-        // 일일 최대 발행 수 5개 제한 도달
+      if (count >= 15) {
+        // 일일 최대 발행 수 15개 제한 도달
         continue;
       }
 
@@ -244,10 +247,10 @@ export async function processAutomation() {
         const lastTime = new Date(`${lastCampaignPost.created_at.replace(' ', 'T')}Z`).getTime();
         const nowTime = Date.now();
 
-        // 일일 5개 제한 분배: 24시간 / 5 = 4.8시간 = 288분
+        // 일일 15개 제한 분배: 24시간 / 15 = 1.6시간 = 96분
         // 발행 시 특정 시간이 아닌 5분 ~ 10분 정도의 랜덤 오차 추가
         const randomOffsetMinutes = 5 + Math.random() * 5; // 5분 ~ 10분 오차
-        const minIntervalMs = (288 + randomOffsetMinutes) * 60 * 1000;
+        const minIntervalMs = (96 + randomOffsetMinutes) * 60 * 1000;
 
         if (nowTime - lastTime < minIntervalMs) {
           // 주기 미달
@@ -419,7 +422,10 @@ export async function processScheduledPosts() {
               content: finalContent,
               image_url: post.image_url,
             },
-            { headless: post.headless === 1 },
+            { 
+              headless: post.headless === 1,
+              onProgress: (level, msg) => emitLog(level, msg, post.user_id)
+            },
           );
 
           if (postResult.success) {
