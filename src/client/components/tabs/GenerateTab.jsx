@@ -323,18 +323,62 @@ const GenerateTab = React.memo(
 
       setCampaignSubmitting(true);
       try {
-        await apiFetch('/api/campaigns', {
+        const campaign = await apiFetch('/api/campaigns', {
           method: 'POST',
           body: JSON.stringify(newCampaign),
         });
+        
+        // 추가: 바로 발행/예약 옵션
+        const action = window.confirm('작업대상 포스트 등록 완료! 이 글을 즉시 발행하시겠습니까? (취소하면 예약 설정)');
+        if (action) {
+          // 즉시 발행
+          await apiFetch('/api/post', {
+            method: 'POST',
+            body: JSON.stringify({
+              title: newCampaign.title,
+              content: newCampaign.content,
+              image_url: newCampaign.image_url,
+              headless: true,
+            }),
+          });
+          alert('즉시 발행 요청 완료!');
+        } else {
+          // 예약 발행
+          const time = prompt('예약 발행 시간을 입력하세요 (YYYY-MM-DD HH:MM)');
+          if (time) {
+            await apiFetch('/api/posts/schedule', {
+              method: 'POST',
+              body: JSON.stringify({
+                title: newCampaign.title,
+                content: newCampaign.content,
+                image_url: newCampaign.image_url,
+                scheduled_at: new Date(time).toISOString(),
+                headless: true,
+              }),
+            });
+            alert('예약 발행 등록 완료!');
+          }
+        }
+
         setNewCampaign({ title: '', content: '', image_url: '' });
         setCampaignsExpanded(false);
         await fetchAll();
-        alert('✅ 24시간 자동화 작업대상 포스트가 성공적으로 등록되었습니다!');
       } catch (err) {
         alert(`등록 실패: ${err.message}`);
       } finally {
         setCampaignSubmitting(false);
+      }
+    };
+
+    // ── 작업대상 포스트(캠페인) 전체 삭제 ──
+    const handleCampaignDeleteAll = async () => {
+      if (!window.confirm('정말 등록된 모든 자동화 작업대상 포스트를 삭제하시겠습니까?')) return;
+      try {
+        await apiFetch('/api/campaigns/all', { method: 'DELETE' });
+        await fetchAll();
+        alert('모든 작업대상 포스트가 삭제되었습니다.');
+      } catch (err) {
+        alert(`전체 삭제 실패: ${err.message}`);
       }
     };
 
@@ -942,12 +986,20 @@ const GenerateTab = React.memo(
                 <span>🎯 24/7 자동화 대상포스트</span>
                 <span className="badge badge-primary font-bold">{campaigns.length}</span>
               </div>
-              <button
-                onClick={() => setCampaignsExpanded(!campaignsExpanded)}
-                className="btn btn-xs btn-ghost text-xs cursor-pointer border border-base-300 hover:bg-base-300"
-              >
-                {campaignsExpanded ? '➖ 닫기' : '➕ 등록하기'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCampaignDeleteAll}
+                  className="btn btn-xs btn-error text-xs cursor-pointer"
+                >
+                  🗑️ 전체 삭제
+                </button>
+                <button
+                  onClick={() => setCampaignsExpanded(!campaignsExpanded)}
+                  className="btn btn-xs btn-ghost text-xs cursor-pointer border border-base-300 hover:bg-base-300"
+                >
+                  {campaignsExpanded ? '➖ 닫기' : '➕ 등록하기'}
+                </button>
+              </div>
             </SectionTitle>
 
             {/* 아코디언식 등록 폼 */}
