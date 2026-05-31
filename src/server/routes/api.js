@@ -307,6 +307,9 @@ router.post('/campaigns', (req, res) => {
     [req.user.id, title, content, image_url || null],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
+      if (!getSchedulerStatus().isRunning) {
+        startScheduler();
+      }
       res.json({ id: this.lastID, success: true });
     },
   );
@@ -395,6 +398,9 @@ router.post('/posts/:id/retry', (req, res) => {
         return res
           .status(404)
           .json({ error: '실패 상태인 포스트를 찾을 수 없거나 이미 처리되었습니다.' });
+      if (!getSchedulerStatus().isRunning) {
+        startScheduler();
+      }
       processScheduledPosts();
       res.json({ success: true, message: '포스트가 예약 목록으로 이동되었습니다.' });
     },
@@ -423,6 +429,9 @@ router.post('/posts/schedule', (req, res) => {
     ],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
+      if (!getSchedulerStatus().isRunning) {
+        startScheduler();
+      }
       res.json({ id: this.lastID, status });
     },
   );
@@ -448,6 +457,9 @@ router.post('/posts/:id/publish-now', (req, res) => {
     [id, req.user.id],
     (err) => {
       if (err) return res.status(500).json({ error: err.message });
+      if (!getSchedulerStatus().isRunning) {
+        startScheduler();
+      }
       processScheduledPosts();
       res.json({
         success: true,
@@ -466,6 +478,10 @@ router.post('/post', async (req, res) => {
   }
 
   try {
+    if (!getSchedulerStatus().isRunning) {
+      startScheduler();
+    }
+
     let account = null;
     if (account_id) {
       account = await new Promise((resolve, reject) => {

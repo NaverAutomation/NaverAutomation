@@ -544,11 +544,8 @@ const GenerateTab = React.memo(
                           어떤 주제로 포스팅할까요?
                         </label>
                         <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl">
-                            💡
-                          </span>
-                          <input
-                            className="input input-lg input-bordered w-full pl-12 bg-base-100 placeholder-base-content/30 focus:border-primary shadow-inner"
+                          <textarea
+                            className="textarea input-lg input-bordered w-full h-[200px] p-4 pl-12 bg-base-100 placeholder-base-content/30 focus:border-primary shadow-inner"
                             placeholder="예: 성수동 핫플 카페 5곳 정리 (또는 작성해둔 글을 그대로 붙여넣으세요)"
                             value={keyword}
                             onChange={(e) => setKeyword(e.target.value)}

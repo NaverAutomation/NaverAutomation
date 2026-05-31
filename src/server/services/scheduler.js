@@ -323,13 +323,47 @@ export async function processScheduledPosts() {
             post.user_id,
           );
 
+          // AI 원고 생성 (Rewrite) - 유사 문서 방지를 위한 자동 재작성 적용
+          let finalTitle = post.title;
+          let finalContent = post.content;
+
+          try {
+            let masterKey = getCachedGlobalSetting('master_gemini_api_key');
+            if (!masterKey) {
+              masterKey = await getGlobalSetting('master_gemini_api_key');
+            }
+            if (masterKey && masterKey !== 'YOUR_KEY_HERE') {
+              emitLog(
+                'info',
+                `예약글 [${post.title}]에 대한 유사 문서 방지 AI 재작성을 시작합니다.`,
+                post.user_id,
+              );
+              const aiResult = await generateRewriteWithGemini(masterKey, post.title, post.content);
+              if (aiResult?.title && aiResult?.content) {
+                finalTitle = aiResult.title;
+                finalContent = aiResult.content;
+                emitLog(
+                  'success',
+                  `예약글 AI 재작성 완료. 새로운 제목: ${finalTitle}`,
+                  post.user_id,
+                );
+              }
+            }
+          } catch (rewriteError) {
+            emitLog(
+              'warn',
+              `예약글 AI 재작성 실패 (원본 내용으로 발행 진행): ${rewriteError.message}`,
+              post.user_id,
+            );
+          }
+
           // 2. 네이버 블로그 포스팅
           const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
           const postResult = await postToNaver(
             decryptedAccount,
             {
-              title: post.title,
-              content: post.content,
+              title: finalTitle,
+              content: finalContent,
               image_url: post.image_url,
             },
             { headless: post.headless === 1 },

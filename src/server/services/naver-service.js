@@ -1,4 +1,6 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
@@ -367,6 +369,58 @@ async function publishPostAction(page) {
  * @param {object} post 포스팅 내용 (title, content, image_url)
  * @param {object} options 실행 옵션 (headless)
  */
+/**
+ * Playwright의 Chromium 브라우저를 백그라운드에서 자동으로 다운로드 및 설치합니다.
+ */
+async function installPlaywrightChromium() {
+  console.log('Playwright Chromium is missing. Starting automatic installation...');
+  return new Promise((resolve, reject) => {
+    try {
+      const require = createRequire(import.meta.url);
+      const cliPath = require.resolve('playwright-core/cli.js');
+
+      console.log(`Using Playwright CLI path: ${cliPath}`);
+      console.log(`Using node executable: ${process.execPath}`);
+
+      const child = spawn(process.execPath, [cliPath, 'install', 'chromium'], {
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+        },
+      });
+
+      child.stdout.on('data', (data) => {
+        console.log(`[Playwright Install] ${data.toString().trim()}`);
+      });
+
+      child.stderr.on('data', (data) => {
+        console.error(`[Playwright Install Error] ${data.toString().trim()}`);
+      });
+
+      child.on('close', (code) => {
+        if (code === 0) {
+          console.log('Playwright Chromium installed successfully.');
+          resolve();
+        } else {
+          reject(new Error(`Playwright install process exited with code ${code}`));
+        }
+      });
+
+      child.on('error', (err) => {
+        reject(err);
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
+ * 네이버 블로그 포스팅 메인 함수
+ * @param {object} account 네이버 계정 정보 (naver_id, naver_pw)
+ * @param {object} post 포스팅 내용 (title, content, image_url)
+ * @param {object} options 실행 옵션 (headless)
+ */
 export async function postToNaver(account, post, options = {}) {
   let browser;
   try {
@@ -377,14 +431,45 @@ export async function postToNaver(account, post, options = {}) {
       effectiveHeadless = false;
     }
 
-    browser = await chromium.launch({
-      headless: effectiveHeadless,
-      args: [
-        '--disable-blink-features=AutomationControlled',
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-      ],
-    });
+    try {
+      browser = await chromium.launch({
+        headless: effectiveHeadless,
+        args: [
+          '--disable-blink-features=AutomationControlled',
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+        ],
+      });
+    } catch (launchError) {
+      if (
+        launchError?.message?.includes("Executable doesn't exist") ||
+        launchError?.message?.includes('looks like Playwright was upgraded')
+      ) {
+        console.log(
+          'Chromium launch failed. Attempting to install Playwright Chromium automatically...',
+        );
+        try {
+          await installPlaywrightChromium();
+          // 브라우저 다시 시작 시도
+          browser = await chromium.launch({
+            headless: effectiveHeadless,
+            args: [
+              '--disable-blink-features=AutomationControlled',
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+            ],
+          });
+        } catch (installErr) {
+          console.error('Failed to automatically install Playwright Chromium:', installErr);
+          return {
+            success: false,
+            message: `Playwright 브라우저 자동 설치에 실패했습니다. (에러: ${installErr.message}). 프로그램 재시작 또는 인터넷 연결 확인을 해주세요.`,
+          };
+        }
+      } else {
+        throw launchError;
+      }
+    }
 
     const context = await browser.newContext({
       userAgent:
@@ -438,13 +523,6 @@ export async function postToNaver(account, post, options = {}) {
     return { success: true, message: 'Successfully posted to Naver Blog' };
   } catch (error) {
     console.error('Naver posting error:', error);
-    if (error?.message?.includes("Executable doesn't exist")) {
-      return {
-        success: false,
-        message:
-          'Playwright 브라우저가 설치되지 않았습니다. 프로젝트 루트에서 "npx playwright install chromium" 을 1회 실행해 주세요.',
-      };
-    }
     return { success: false, message: error.message };
   } finally {
     if (browser) {

@@ -8,7 +8,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { CONFIG } from './config.js';
 import { requireAuth } from './middleware/auth.js';
 import apiRouter from './routes/api.js';
-import { setIO } from './services/scheduler.js';
+import { setIO, startScheduler } from './services/scheduler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -82,6 +82,14 @@ export const startServer = (initialPort = CONFIG.PORT) => {
         httpServer.listen(availablePort, () => {
           console.log(`✅ Server running on http://localhost:${availablePort}`);
           console.log(`📡 Socket.io enabled`);
+          try {
+            startScheduler();
+          } catch (schedulerErr) {
+            console.error(
+              '[Startup] Failed to start scheduler automatically:',
+              schedulerErr.message,
+            );
+          }
           resolve({ server: httpServer, port: availablePort });
         });
 
