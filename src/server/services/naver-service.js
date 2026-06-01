@@ -455,9 +455,8 @@ export async function postToNaver(account, post, options = {}) {
     let effectiveHeadless =
       typeof options.headless === 'boolean' ? options.headless : CONFIG.HEADLESS;
 
-    // 개발 환경이고 명시적으로 headless: true를 요청하지 않은 경우에만 브라우저를 표시합니다.
-    // 24/7 자동화 등 백그라운드 작업(headless: true)은 개발 환경에서도 브라우저를 띄우지 않도록 합니다.
-    if (process.env.NODE_ENV === 'development' && options.headless !== true) {
+    // 개발 환경일 경우에는 디버깅하기 쉽게 헤드리스 모드를 해제하고 브라우저 창을 표시합니다.
+    if (process.env.NODE_ENV === 'development') {
       console.log('[Dev Mode] Auto-disabling headless mode to display browser window.');
       effectiveHeadless = false;
     }

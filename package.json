@@ -1,6 +1,6 @@
 {
   "name": "naver-auto",
-  "version": "0.3.317",
+  "version": "0.3.318",
   "description": "Naver Blog Automation with AI",
   "type": "module",
   "main": "src/main.js",
@@ -29,7 +29,7 @@
     "playwright:install": "playwright install chromium",
     "postinstall": "npm run playwright:install",
     "electron:dev": "cross-env NODE_ENV=development electron .",
-    "electron:build": "npm run build && npm run playwright:install && electron-builder build --win --publish always"
+    "electron:build": "npm run build && npm run playwright:install && electron-builder build --win --publish never"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

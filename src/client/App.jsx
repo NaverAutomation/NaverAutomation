@@ -7,6 +7,7 @@ import AccountsTab from './components/tabs/AccountsTab';
 import DashboardTab from './components/tabs/DashboardTab';
 import GenerateTab from './components/tabs/GenerateTab';
 import LogsTab from './components/tabs/LogsTab';
+import QueueTab from './components/tabs/QueueTab';
 import SettingsTab from './components/tabs/SettingsTab';
 import { apiFetch } from './utils/api';
 import { supabase } from './utils/supabase.js';
@@ -37,6 +38,7 @@ const TABS = [
   { id: 'dashboard', label: '🏠 대시보드' },
   { id: 'accounts', label: '👤 계정 관리' },
   { id: 'generate', label: '✍️ 글 생성 & 관리' },
+  { id: 'queue', label: '📅 예약 대기열' },
   { id: 'logs', label: '📊 로그' },
   { id: 'settings', label: '⚙️ 설정' },
 ];
@@ -280,7 +282,7 @@ const App = () => {
                 }`}
               >
                 {tab.label}
-                {tab.id === 'generate' && scheduledPosts.length > 0 ? (
+                {(tab.id === 'generate' || tab.id === 'queue') && scheduledPosts.length > 0 ? (
                   <span className="badge badge-primary badge-sm ml-2 font-bold shadow-sm">
                     {scheduledPosts.length}
                   </span>
@@ -324,6 +326,17 @@ const App = () => {
               fetchAll={fetchAll}
               reusedPost={reusedPost}
               clearReusedPost={() => setReusedPost(null)}
+            />
+          </div>
+          <div style={{ display: activeTab === 'queue' ? 'block' : 'none' }}>
+            <QueueTab
+              scheduledPosts={scheduledPosts}
+              posts={posts}
+              fetchAll={fetchAll}
+              onReusePost={(post) => {
+                setReusedPost(post);
+                setActiveTab('generate');
+              }}
             />
           </div>
           <div style={{ display: activeTab === 'logs' ? 'block' : 'none' }}>

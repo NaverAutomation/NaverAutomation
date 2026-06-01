@@ -461,7 +461,7 @@ router.get('/posts/scheduled', (req, res) => {
 router.post('/posts/:id/retry', (req, res) => {
   const { id } = req.params;
   db.run(
-    "UPDATE posts SET status = 'scheduled', scheduled_at = datetime('now', '-1 minute') WHERE id = ? AND user_id = ? AND status = 'failed'",
+    "UPDATE posts SET status = 'scheduled', headless = 1, scheduled_at = datetime('now', '-1 minute') WHERE id = ? AND user_id = ? AND status = 'failed'",
     [id, req.user.id],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
