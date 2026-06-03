@@ -560,15 +560,65 @@ router.patch('/posts/scheduled/:id', (req, res) => {
     return res.status(400).json({ error: '제목과 본문은 필수입니다.' });
   }
 
-  db.run(
-    "UPDATE posts SET title = ?, content = ?, keyword = ?, scheduled_at = ?, status = 'scheduled' WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing')",
-    [title, content, keyword || null, scheduled_at || null, req.params.id, req.user.id],
-    function (err) {
+  // 1. 기존 포스트 가져와서 키워드가 변경되었는지 확인
+  db.get(
+    "SELECT * FROM posts WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing')",
+    [req.params.id, req.user.id],
+    async (err, post) => {
       if (err) return res.status(500).json({ error: err.message });
-      if (this.changes === 0) {
+      if (!post) {
         return res.status(404).json({ error: '수정 가능한 예약 포스트를 찾을 수 없습니다.' });
       }
-      res.json({ success: true, message: '예약 포스트가 수정되었습니다.' });
+
+      let finalTitle = title;
+      let finalContent = content;
+      const newKeyword = keyword ? keyword.trim() : null;
+      const oldKeyword = post.keyword ? post.keyword.trim() : null;
+
+      // 키워드가 존재하고, 기존 키워드와 달라진 경우에만 AI 자동 재생성 수행
+      if (newKeyword && newKeyword !== oldKeyword) {
+        try {
+          const engine = 'gemini';
+          const apiKey = await resolveGeminiApiKey(req.token);
+          if (!apiKey) {
+            return res.status(500).json({ error: 'AI 재생성 실패: API 키가 유효하지 않습니다.' });
+          }
+          const model = (await getSettingFromDB(req.user.id, 'gemini_model')) || 'auto';
+          const aiConfig = { apiKey, model };
+
+          emitLog(
+            'info',
+            `[예약 수정] 키워드가 "${oldKeyword || '없음'}"에서 "${newKeyword}"(으)로 변경되어 AI 원고를 재작성합니다.`,
+            req.user.id,
+          );
+
+          const aiResult = await generateContent(engine, aiConfig, newKeyword);
+          finalTitle = aiResult.title;
+          finalContent = aiResult.content;
+        } catch (aiErr) {
+          return res.status(500).json({ error: `AI 원고 재작성 실패: ${aiErr.message}` });
+        }
+      }
+
+      db.run(
+        "UPDATE posts SET title = ?, content = ?, keyword = ?, scheduled_at = ?, status = 'scheduled' WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing')",
+        [finalTitle, finalContent, newKeyword, scheduled_at || null, req.params.id, req.user.id],
+        (err) => {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({
+            success: true,
+            message:
+              newKeyword !== oldKeyword
+                ? '키워드 변경에 따라 AI 원고가 재생성 및 수정되었습니다.'
+                : '예약 포스트가 수정되었습니다.',
+            post: {
+              title: finalTitle,
+              content: finalContent,
+              keyword: newKeyword,
+            },
+          });
+        },
+      );
     },
   );
 });

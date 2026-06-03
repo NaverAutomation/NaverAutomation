@@ -26,6 +26,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
   const [editingKeyword, setEditingKeyword] = useState('');
   const [editingTimeValue, setEditingTimeValue] = useState('');
   const [expandedPostIds, setExpandedPostIds] = useState({});
+  const [updating, setUpdating] = useState(false);
 
   // ── 예약 발행 취소 ──
   const handleCancelSchedule = async (id) => {
@@ -53,6 +54,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
   // ── 예약 글 상세 정보 수정 적용 ──
   const handleUpdatePost = async (id) => {
     if (!editingTimeValue) return alert('예약 시간을 입력하세요.');
+    setUpdating(true);
     try {
       const utcTime = new Date(editingTimeValue).toISOString();
       const res = await apiFetch(`/api/posts/scheduled/${id}`, {
@@ -69,6 +71,8 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
       await fetchAll();
     } catch (err) {
       alert(`수정 실패: ${err.message}`);
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -217,14 +221,20 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                           <button
                             onClick={() => handleUpdatePost(post.id)}
                             className="btn btn-xs btn-primary font-black cursor-pointer"
+                            disabled={updating}
                           >
-                            저장
+                            {updating ? (
+                              <span className="loading loading-spinner loading-xs"></span>
+                            ) : (
+                              '저장'
+                            )}
                           </button>
                           <button
                             onClick={() => {
                               setEditingPostId(null);
                             }}
                             className="btn btn-xs btn-ghost border-base-300 font-bold cursor-pointer"
+                            disabled={updating}
                           >
                             취소
                           </button>

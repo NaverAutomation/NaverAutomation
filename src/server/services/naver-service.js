@@ -415,11 +415,33 @@ async function publishPostAction(page, tags = []) {
   await page.waitForTimeout(1000); // 렌더링 안정화
 
   // 1차 발행 버튼 (에디터 상단 우측)
-  const publishBtn = page
-    .locator('.publish_btn__m9KHH, button[data-click-area="tpb.publish"]')
-    .first();
-  await publishBtn.waitFor({ state: 'visible', timeout: 10000 });
-  await publishBtn.click({ force: true });
+  const firstPublishSelectors = [
+    '.publish_btn__m9KHH',
+    'button[data-click-area="tpb.publish"]',
+    'button[class*="publish_btn"]',
+    'button:has-text("발행")',
+  ];
+
+  let firstClicked = false;
+  for (const selector of firstPublishSelectors) {
+    const candidate = page.locator(selector).first();
+    const visible = await candidate.isVisible().catch(() => false);
+    if (!visible) continue;
+
+    await candidate.click({ force: true });
+    firstClicked = true;
+    console.log(`Clicked 1st publish button using selector: ${selector}`);
+    break;
+  }
+
+  if (!firstClicked) {
+    console.log('No first publish button immediately visible, waiting for default...');
+    const publishBtn = page
+      .locator('.publish_btn__m9KHH, button[data-click-area="tpb.publish"]')
+      .first();
+    await publishBtn.waitFor({ state: 'visible', timeout: 8000 });
+    await publishBtn.click({ force: true });
+  }
 
   // 모달 애니메이션 대기
   await page.waitForTimeout(1000);
@@ -437,10 +459,22 @@ async function publishPostAction(page, tags = []) {
     '.ReactModal__Content button:has-text("발행")',
   ];
 
+  // 최종 발행 버튼이 모달에 렌더링되고 활성화될 때까지 대기
+  console.log('Waiting for final publish dialog/button to appear...');
+  const combinedSelector = finalPublishSelectors.join(', ');
+  try {
+    await page.locator(combinedSelector).last().waitFor({ state: 'visible', timeout: 5000 });
+  } catch (err) {
+    console.warn(
+      'Timeout waiting for final publish button to be visible, attempting to proceed anyway...',
+      err.message,
+    );
+  }
+
   let finalClicked = false;
   for (const selector of finalPublishSelectors) {
     const candidate = page.locator(selector).last();
-    const visible = await candidate.isVisible({ timeout: 2000 }).catch(() => false);
+    const visible = await candidate.isVisible().catch(() => false);
     if (!visible) continue;
 
     await candidate.click({ force: true });
