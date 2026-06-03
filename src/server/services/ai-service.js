@@ -204,15 +204,22 @@ export async function generateImageWithGemini(apiKey, keyword, _title, _content)
     // 블로그 포스팅과 어울리는 자연스럽고 감성적인 이미지 프롬프트 작성
     const prompt = `A highly realistic, aesthetic, and visually appealing blog cover image representing the following topic: ${keyword}. No text in the image. High quality, detailed.`;
 
-    // AI Studio의 Imagen 3 모델 사용
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
+    // AI Studio의 Gemini 2.5 Flash Image (Nano Banana) 모델 사용
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        instances: [{ prompt }],
-        parameters: { sampleCount: 1, aspectRatio: '16:9' },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          responseModalities: ['TEXT', 'IMAGE'],
+        },
       }),
     });
 
@@ -223,9 +230,13 @@ export async function generateImageWithGemini(apiKey, keyword, _title, _content)
     }
 
     const data = await response.json();
-    if (data.predictions && data.predictions.length > 0) {
-      const base64Image = data.predictions[0].bytesBase64Encoded;
-      return base64Image;
+    if (data.candidates && data.candidates.length > 0) {
+      const parts = data.candidates[0].content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData?.data) {
+          return part.inlineData.data;
+        }
+      }
     }
     return null;
   } catch (error) {
