@@ -186,9 +186,9 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                         </span>
                       )}
                       {post.tags
-                        ? post.tags.split(',').map((t, idx) => (
+                        ? post.tags.split(',').map((t) => (
                             <span
-                              key={idx}
+                              key={`${post.id}-tag-${t.trim()}`}
                               className="badge badge-primary badge-outline badge-xs font-bold text-[10px]"
                             >
                               {t.trim()}
@@ -257,6 +257,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                         </div>
                         <div className="flex gap-2 justify-end">
                           <button
+                            type="button"
                             onClick={() => handleUpdatePost(post.id)}
                             className="btn btn-xs btn-primary font-black cursor-pointer"
                             disabled={updating}
@@ -268,6 +269,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                             )}
                           </button>
                           <button
+                            type="button"
                             onClick={() => {
                               setEditingPostId(null);
                             }}
@@ -317,6 +319,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                             </span>
                           ) : null}
                           <button
+                            type="button"
                             onClick={() => startEditing(post)}
                             className="btn btn-xs btn-ghost btn-circle text-[10px] w-5 h-5 min-h-0 cursor-pointer border border-base-300 hover:bg-base-300"
                             title="상세 수정"
@@ -324,6 +327,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                             ✏️
                           </button>
                           <button
+                            type="button"
                             onClick={() =>
                               setExpandedPostIds((prev) => ({
                                 ...prev,
@@ -342,6 +346,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                   {editingPostId !== post.id && (
                     <div className="flex flex-col gap-1 shrink-0">
                       <button
+                        type="button"
                         onClick={() => handlePublishNow(post.id)}
                         className="btn btn-xs btn-success btn-outline font-bold cursor-pointer"
                         title="즉시 강제발행"
@@ -349,6 +354,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                         🚀 발행
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleCancelSchedule(post.id)}
                         className="btn btn-xs btn-error btn-outline font-bold cursor-pointer"
                         title="취소"
@@ -420,6 +426,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                   </div>
                   <div className="flex gap-1 shrink-0 ml-1">
                     <button
+                      type="button"
                       onClick={() => handleReuseHistoryPost(post)}
                       className="btn btn-xs btn-primary font-bold cursor-pointer"
                       title="이 글의 내용을 편집기에 불러옵니다"
@@ -427,6 +434,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                       🔄 사용
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleReScheduleHistoryPost(post)}
                       className="btn btn-xs btn-neutral font-bold cursor-pointer"
                       title="대기열에 그대로 재예약"
@@ -434,6 +442,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                       📅 예약
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleDeleteHistoryPost(post.id)}
                       className="btn btn-xs btn-error btn-outline font-bold cursor-pointer"
                       title="발행 기록 삭제"

@@ -78,6 +78,7 @@ const GenerateTab = React.memo(
 
     // ── 외부 이력 재사용 이벤트 감지 ──
     useEffect(() => {
+      let timerId = null;
       if (reusedPost) {
         setManualTitle(reusedPost.title || '');
         setManualContent(reusedPost.content || '');
@@ -85,7 +86,7 @@ const GenerateTab = React.memo(
         setManualTags(reusedPost.tags || '');
         setActiveSubTab('manual');
 
-        setTimeout(() => {
+        timerId = setTimeout(() => {
           const composeContainer = document.getElementById('compose-hub-card');
           if (composeContainer) {
             composeContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -93,6 +94,9 @@ const GenerateTab = React.memo(
         }, 100);
         clearReusedPost();
       }
+      return () => {
+        if (timerId) clearTimeout(timerId);
+      };
     }, [reusedPost, clearReusedPost]);
 
     // ── 이미지 업로드 핸들러 ──
@@ -423,6 +427,7 @@ const GenerateTab = React.memo(
         <Card id="compose-hub-card">
           <div className="flex bg-base-300 p-1.5 rounded-xl mb-6">
             <button
+              type="button"
               onClick={() => setActiveSubTab('ai')}
               className={`flex-1 py-3 text-center rounded-lg font-black text-sm transition-all duration-200 cursor-pointer ${
                 activeSubTab === 'ai'
@@ -433,6 +438,7 @@ const GenerateTab = React.memo(
               ✨ AI 초안 생성
             </button>
             <button
+              type="button"
               onClick={() => setActiveSubTab('keyword')}
               className={`flex-1 py-3 text-center rounded-lg font-black text-sm transition-all duration-200 cursor-pointer ${
                 activeSubTab === 'keyword'
@@ -443,6 +449,7 @@ const GenerateTab = React.memo(
               📅 자동 키워드 예약
             </button>
             <button
+              type="button"
               onClick={() => setActiveSubTab('manual')}
               className={`flex-1 py-3 text-center rounded-lg font-black text-sm transition-all duration-200 cursor-pointer ${
                 activeSubTab === 'manual'
@@ -579,7 +586,10 @@ const GenerateTab = React.memo(
                     </span>
                     <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2 bg-base-200/50 rounded-lg border border-base-300">
                       {activeKeywords.map((kw, i) => (
-                        <span key={i} className="badge badge-sm badge-neutral font-semibold">
+                        <span
+                          key={`${kw}-${i}`}
+                          className="badge badge-sm badge-neutral font-semibold"
+                        >
                           #{kw}
                         </span>
                       ))}
@@ -659,7 +669,7 @@ const GenerateTab = React.memo(
                   <div className="flex flex-wrap gap-2 p-3 bg-base-200/30 border border-base-300 rounded-xl min-h-[96px]">
                     {keywordRepresentativeImages.map((url, idx) => (
                       <div
-                        key={idx}
+                        key={`${url}-${idx}`}
                         className="relative w-16 h-16 rounded-lg overflow-hidden border border-base-300 group shadow-sm"
                       >
                         <img src={url} alt={`rep-${idx}`} className="w-full h-full object-cover" />
@@ -705,7 +715,7 @@ const GenerateTab = React.memo(
                   <div className="flex flex-wrap gap-2 p-3 bg-base-200/30 border border-base-300 rounded-xl min-h-[96px]">
                     {keywordContentImages.map((url, idx) => (
                       <div
-                        key={idx}
+                        key={`${url}-${idx}`}
                         className="relative w-16 h-16 rounded-lg overflow-hidden border border-base-300 group shadow-sm"
                       >
                         <img

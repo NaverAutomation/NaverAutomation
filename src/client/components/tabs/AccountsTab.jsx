@@ -120,12 +120,14 @@ const AccountsTab = React.memo(({ accounts, fetchAll }) => {
                   <StatusBadge status={acc.status} />
                   <div className="flex-1"></div>
                   <button
+                    type="button"
                     onClick={() => handleToggleStatus(acc.id, acc.status)}
                     className={`btn btn-sm ${acc.status === 'active' ? 'btn-warning' : 'btn-success'} shadow-sm`}
                   >
                     {acc.status === 'active' ? '⏸ 일시정지' : '▶ 활성화'}
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleDelete(acc.id, acc.naver_id)}
                     className="btn btn-sm btn-error btn-outline"
                   >

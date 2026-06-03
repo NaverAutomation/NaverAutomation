@@ -204,7 +204,10 @@ const DashboardTab = React.memo(
                 .reverse()
                 .map((log, i) => (
                   <div
-                    key={i}
+                    key={
+                      log.id ||
+                      `${log.created_at || ''}-${i}-${(log.message || '').substring(0, 10)}`
+                    }
                     className={`text-xs font-mono p-2 rounded bg-base-100/50 border border-base-300 ${log.level === 'error' ? 'text-error' : log.level === 'success' ? 'text-success' : 'text-base-content/70'}`}
                   >
                     <span className="mr-3 text-base-content/40">
@@ -292,6 +295,7 @@ const DashboardTab = React.memo(
                       <td>
                         <div className="flex justify-center gap-2">
                           <button
+                            type="button"
                             onClick={() => setSelectedPost(p)}
                             className="btn btn-xs btn-neutral shadow-sm font-semibold"
                           >
@@ -299,6 +303,7 @@ const DashboardTab = React.memo(
                           </button>
                           {p.status === 'failed' && (
                             <button
+                              type="button"
                               onClick={() => handleRetry(p.id)}
                               disabled={retrying}
                               className="btn btn-xs btn-outline btn-info shadow-sm font-semibold"
@@ -307,6 +312,7 @@ const DashboardTab = React.memo(
                             </button>
                           )}
                           <button
+                            type="button"
                             onClick={() => handleDeletePost(p.id)}
                             className="btn btn-xs btn-error btn-outline shadow-sm font-semibold"
                             title="기록 삭제"

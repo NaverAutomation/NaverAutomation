@@ -17,6 +17,8 @@ export const useSocket = (onLog, onTaskStatus) => {
       });
 
       return () => {
+        socket.off('log');
+        socket.off('task-status');
         socket.disconnect();
       };
     }

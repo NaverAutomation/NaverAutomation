@@ -40,7 +40,7 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
           📊 실시간 시스템 로그
           <span className="badge badge-neutral shadow-inner">{allLogs.length}건</span>
         </h2>
-        <button className="btn btn-sm btn-error shadow-sm" onClick={handleClearLogs}>
+        <button type="button" className="btn btn-sm btn-error shadow-sm" onClick={handleClearLogs}>
           🗑 로그 DB 비우기
         </button>
       </div>
@@ -61,7 +61,7 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
 
               return (
                 <div
-                  key={i}
+                  key={log.id || `${log.created_at || ''}-${i}`}
                   className="group flex items-start gap-4 py-1 hover:bg-white/[0.03] px-2 rounded-lg transition-colors border-b border-white/[0.02] last:border-0"
                 >
                   <span className="shrink-0 text-slate-500 text-xs font-medium pt-0.5">

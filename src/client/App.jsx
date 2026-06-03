@@ -119,7 +119,11 @@ const App = () => {
       setTaskStatus(status);
     });
 
-    return () => socket.disconnect();
+    return () => {
+      socket.off('log');
+      socket.off('task-status');
+      socket.disconnect();
+    };
   }, []);
 
   useEffect(() => {
@@ -267,6 +271,7 @@ const App = () => {
         </div>
         <div className="flex-none gap-3 sm:gap-6">
           <button
+            type="button"
             onClick={handleLogout}
             className="btn btn-ghost btn-sm sm:btn-md"
             title="로그아웃"
@@ -282,6 +287,7 @@ const App = () => {
           <div role="tablist" className="tabs tabs-bordered w-full flex-nowrap min-w-max pb-px">
             {TABS.map((tab) => (
               <button
+                type="button"
                 key={tab.id}
                 role="tab"
                 onClick={() => setActiveTab(tab.id)}

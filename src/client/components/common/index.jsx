@@ -43,7 +43,7 @@ export const Textarea = React.memo(({ label, className = '', ...props }) => (
 ));
 
 export const Btn = React.memo(
-  ({ children, variant = 'primary', className = '', block = false, ...props }) => {
+  ({ children, variant = 'primary', className = '', block = false, type = 'button', ...props }) => {
     const vMap = {
       primary: 'btn-primary shadow-primary/30',
       success: 'btn-success shadow-success/30',
@@ -53,6 +53,7 @@ export const Btn = React.memo(
     };
     return (
       <button
+        type={type}
         className={`btn shadow-sm hover:shadow-md transition-all ${vMap[variant] || 'btn-primary'} ${block ? 'btn-block' : ''} ${className}`}
         {...props}
       >
@@ -96,6 +97,7 @@ export const Modal = React.memo(({ title, show, onClose, children }) => {
         <header className="px-6 py-4 border-b border-base-300 flex justify-between items-center bg-base-300/50">
           <h3 className="font-extrabold text-xl text-base-content tracking-tight">{title}</h3>
           <button
+            type="button"
             className="btn btn-sm btn-circle btn-ghost hover:bg-base-content/20"
             onClick={onClose}
           >
