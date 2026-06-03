@@ -162,3 +162,74 @@ export async function generateContent(engine, apiKeyOrConfig, keyword) {
     throw new Error('OpenAI 서비스가 비활성화되었습니다. Gemini 또는 Ollama를 사용해주세요.');
   }
 }
+
+/**
+ * Google Gemini를 이용한 태그 자동 생성
+ */
+export async function generateTagsWithGemini(apiKey, keyword, title, content) {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const modelName = 'gemini-2.5-flash-lite';
+
+  try {
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const prompt = `당신은 네이버 블로그 SEO 전문가입니다. 
+다음 제공된 키워드, 제목, 본문을 바탕으로 이 포스팅에 가장 적합한 5~10개의 검색 최적화(SEO) 태그를 추출하거나 생성해주세요.
+반드시 콤마(,)로만 구분된 하나의 문자열로 응답해야 합니다. 
+(예시: 맛집,서울여행,데이트코스,가성비)
+앞뒤로 다른 설명이나 기호 없이 오직 태그만 콤마로 구분해서 출력하세요.
+
+키워드: ${keyword || '없음'}
+제목: ${title || '없음'}
+본문: ${content ? `${content.substring(0, 1000)}...` : '없음'}
+`;
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const tagsStr = response.text().trim();
+    return tagsStr
+      .split(',')
+      .map((t) => t.trim().replace(/^#/, ''))
+      .filter(Boolean)
+      .join(', ');
+  } catch (error) {
+    console.error('Gemini Tag Generation Error:', error);
+    return ''; // 오류 시 빈 태그 반환
+  }
+}
+
+/**
+ * Google Gemini (Imagen)을 이용한 본문 대체용 이미지 생성
+ */
+export async function generateImageWithGemini(apiKey, keyword, _title, _content) {
+  try {
+    // 블로그 포스팅과 어울리는 자연스럽고 감성적인 이미지 프롬프트 작성
+    const prompt = `A highly realistic, aesthetic, and visually appealing blog cover image representing the following topic: ${keyword}. No text in the image. High quality, detailed.`;
+
+    // AI Studio의 Imagen 3 모델 사용
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        instances: [{ prompt }],
+        parameters: { sampleCount: 1, aspectRatio: '16:9' },
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Image Gen API Error:', errText);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.predictions && data.predictions.length > 0) {
+      const base64Image = data.predictions[0].bytesBase64Encoded;
+      return base64Image;
+    }
+    return null;
+  } catch (error) {
+    console.error('generateImageWithGemini error:', error);
+    return null;
+  }
+}

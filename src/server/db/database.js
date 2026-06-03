@@ -57,6 +57,7 @@ function initializeDatabase() {
       post_type TEXT DEFAULT 'manual',
       campaign_id INTEGER,
       keyword TEXT,
+      tags TEXT,
       FOREIGN KEY (account_id) REFERENCES accounts (id)
     )`,
       (err) => {
@@ -71,6 +72,8 @@ function initializeDatabase() {
           addColumnIfNotExists('posts', 'post_type', "TEXT DEFAULT 'manual'");
           addColumnIfNotExists('posts', 'campaign_id', 'INTEGER');
           addColumnIfNotExists('posts', 'keyword', 'TEXT');
+          addColumnIfNotExists('posts', 'tags', 'TEXT');
+          addColumnIfNotExists('posts', 'republish_interval_ms', 'INTEGER');
         }
       },
     );

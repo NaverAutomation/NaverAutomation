@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { CONFIG } from '../config.js';
 import db from '../db/database.js';
-import { generateContent } from '../services/ai-service.js';
+import { generateContent, generateTagsWithGemini } from '../services/ai-service.js';
 import { postToNaver } from '../services/naver-service.js';
 import {
   emitLog,
@@ -471,6 +471,18 @@ router.post('/posts/schedule-keywords', async (req, res) => {
 
     const results = [];
     let currentScheduledTime = new Date(start_time);
+    const intervalMs = (Number(interval_hours) * 60 + Number(interval_minutes)) * 60 * 1000;
+
+    let parsedImages = { representative: [], content: [] };
+    if (image_url) {
+      try {
+        parsedImages = JSON.parse(image_url);
+      } catch (e) {
+        console.error('image_url parse error', e);
+      }
+    }
+    const repImages = parsedImages.representative || [];
+    const contentImages = parsedImages.content || [];
 
     // 순차적으로 생성하여 네이버 제재 및 동시 API 요청 제한 방지
     for (let i = 0; i < keywords.length; i++) {
@@ -486,6 +498,22 @@ router.post('/posts/schedule-keywords', async (req, res) => {
       try {
         const content = await generateContent(engine, aiConfig, keyword);
 
+        let generatedTags = '';
+        if (engine !== 'ollama' && aiConfig.apiKey) {
+          generatedTags = await generateTagsWithGemini(
+            aiConfig.apiKey,
+            keyword,
+            content.title,
+            content.content,
+          );
+        }
+
+        const repImg = repImages.length > 0 ? repImages[i % repImages.length] : null;
+        const finalImageUrl = JSON.stringify({
+          representative: repImg ? [repImg] : [],
+          content: contentImages,
+        });
+
         // 1분 ~ 2분 사이의 랜덤 오차 추가
         const randomOffsetMs = 60000 + Math.random() * 60000;
         const scheduledTimeWithOffset = new Date(currentScheduledTime.getTime() + randomOffsetMs);
@@ -493,7 +521,7 @@ router.post('/posts/schedule-keywords', async (req, res) => {
 
         await new Promise((resolve, reject) => {
           const sql =
-            'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+            'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, republish_interval_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
           db.run(
             sql,
             [
@@ -501,12 +529,14 @@ router.post('/posts/schedule-keywords', async (req, res) => {
               use_round_robin ? null : account_id || null,
               content.title,
               content.content,
-              image_url || null,
+              finalImageUrl,
               headless ? 1 : 0,
               finalScheduledAt,
               'scheduled',
               'keyword',
               keyword,
+              generatedTags,
+              intervalMs > 0 ? intervalMs : null,
             ],
             function (err) {
               if (err) reject(err);
@@ -525,8 +555,7 @@ router.post('/posts/schedule-keywords', async (req, res) => {
         results.push({ keyword, success: false, error: err.message });
       }
 
-      // 다음 예약 시각 계산 (interval_hours와 interval_minutes 가 적용됨)
-      const intervalMs = (Number(interval_hours) * 60 + Number(interval_minutes)) * 60 * 1000;
+      // 다음 예약 시각 계산
       currentScheduledTime = new Date(currentScheduledTime.getTime() + intervalMs);
     }
 
@@ -553,9 +582,9 @@ router.delete('/posts/scheduled/:id', (req, res) => {
   );
 });
 
-// PATCH /posts/scheduled/:id (예약 발행글 수정 - 제목, 본문, 키워드, 예약 시간)
+// PATCH /posts/scheduled/:id (예약 발행글 수정 - 제목, 본문, 키워드, 태그, 예약 시간)
 router.patch('/posts/scheduled/:id', (req, res) => {
-  const { title, content, keyword, scheduled_at } = req.body;
+  const { title, content, keyword, scheduled_at, tags } = req.body;
   if (!title || !content) {
     return res.status(400).json({ error: '제목과 본문은 필수입니다.' });
   }
@@ -572,6 +601,7 @@ router.patch('/posts/scheduled/:id', (req, res) => {
 
       let finalTitle = title;
       let finalContent = content;
+      let finalTags = tags || '';
       const newKeyword = keyword ? keyword.trim() : null;
       const oldKeyword = post.keyword ? post.keyword.trim() : null;
 
@@ -595,14 +625,23 @@ router.patch('/posts/scheduled/:id', (req, res) => {
           const aiResult = await generateContent(engine, aiConfig, newKeyword);
           finalTitle = aiResult.title;
           finalContent = aiResult.content;
+          finalTags = await generateTagsWithGemini(apiKey, newKeyword, finalTitle, finalContent);
         } catch (aiErr) {
           return res.status(500).json({ error: `AI 원고 재작성 실패: ${aiErr.message}` });
         }
       }
 
       db.run(
-        "UPDATE posts SET title = ?, content = ?, keyword = ?, scheduled_at = ?, status = 'scheduled' WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing')",
-        [finalTitle, finalContent, newKeyword, scheduled_at || null, req.params.id, req.user.id],
+        "UPDATE posts SET title = ?, content = ?, keyword = ?, scheduled_at = ?, tags = ?, status = 'scheduled' WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing')",
+        [
+          finalTitle,
+          finalContent,
+          newKeyword,
+          scheduled_at || null,
+          finalTags,
+          req.params.id,
+          req.user.id,
+        ],
         (err) => {
           if (err) return res.status(500).json({ error: err.message });
           res.json({

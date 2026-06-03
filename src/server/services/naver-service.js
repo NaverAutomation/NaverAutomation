@@ -5,6 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { CONFIG } from '../config.js';
+import db from '../db/database.js';
+import { decrypt } from '../utils/crypto.js';
+import { generateImageWithGemini } from './ai-service.js';
 
 /**
  * URL에서 이미지를 다운로드하여 임시 경로에 저장합니다.
@@ -390,15 +393,24 @@ async function removeStrikethrough(page) {
  * [Helper] 태그 입력
  */
 async function inputTags(page, tags) {
-  if (!tags || tags.length === 0) return;
+  if (!tags) return;
+  const tagList = Array.isArray(tags)
+    ? tags
+    : tags
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
+  if (tagList.length === 0) return;
+
   console.log('Inputting tags...');
   try {
     const tagInput = page.locator('#tag-input');
     await tagInput.waitFor({ state: 'visible', timeout: 5000 });
 
-    for (const tag of tags) {
+    for (const tag of tagList) {
       await tagInput.fill(tag);
-      await page.keyboard.press('Enter');
+      await page.waitForTimeout(100);
+      await page.keyboard.press('Space');
       await page.waitForTimeout(200); // 태그 입력 대기
     }
     console.log('Tags input completed.');
@@ -705,6 +717,43 @@ export async function postToNaver(account, post, options = {}) {
         onProgress('info', `본문 사진 업로드 중 (${contentImages.length}개, AI 자동 변조)...`);
       for (const imgUrl of contentImages) {
         await uploadImageToEditor(page, imgUrl, true);
+      }
+    } else {
+      // 본문 이미지가 없을 경우 AI 이미지 생성 시도
+      try {
+        if (onProgress) onProgress('info', '본문 사진이 없어 AI에게 생성 요청 중...');
+
+        let apiKey = null;
+        await new Promise((resolve) => {
+          db.get("SELECT value FROM settings WHERE key = 'gemini_api_key'", [], (err, row) => {
+            if (!err && row && row.value) {
+              try {
+                apiKey = decrypt(row.value);
+              } catch {}
+            }
+            resolve();
+          });
+        });
+
+        if (apiKey && apiKey !== 'YOUR_KEY_HERE') {
+          const base64Image = await generateImageWithGemini(
+            apiKey,
+            post.keyword || post.title,
+            post.title,
+            post.content,
+          );
+          if (base64Image) {
+            const tempImgPath = path.join(os.tmpdir(), `ai_gen_${Date.now()}.png`);
+            fs.writeFileSync(tempImgPath, Buffer.from(base64Image, 'base64'));
+            if (onProgress) onProgress('info', 'AI 사진이 생성되어 업로드합니다...');
+            await uploadImageToEditor(page, tempImgPath, true);
+            if (fs.existsSync(tempImgPath)) {
+              fs.unlinkSync(tempImgPath);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('AI image generation failed:', e.message);
       }
     }
 

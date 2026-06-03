@@ -18,12 +18,26 @@ const toLocalDateTimeString = (utcString) => {
   return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
 };
 
+const getThumbnail = (imageUrlStr) => {
+  if (!imageUrlStr) return null;
+  if (imageUrlStr.startsWith('http')) return imageUrlStr;
+  try {
+    const parsed = JSON.parse(imageUrlStr);
+    if (parsed.representative && parsed.representative.length > 0) return parsed.representative[0];
+    if (parsed.content && parsed.content.length > 0) return parsed.content[0];
+  } catch (_e) {
+    return imageUrlStr;
+  }
+  return null;
+};
+
 const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReusePost }) => {
   // ── 예약 수정 상태 ──
   const [editingPostId, setEditingPostId] = useState(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [editingContent, setEditingContent] = useState('');
   const [editingKeyword, setEditingKeyword] = useState('');
+  const [editingTags, setEditingTags] = useState('');
   const [editingTimeValue, setEditingTimeValue] = useState('');
   const [expandedPostIds, setExpandedPostIds] = useState({});
   const [updating, setUpdating] = useState(false);
@@ -63,6 +77,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
           title: editingTitle,
           content: editingContent,
           keyword: editingKeyword,
+          tags: editingTags,
           scheduled_at: utcTime,
         }),
       });
@@ -120,6 +135,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
     setEditingTitle(post.title || '');
     setEditingContent(post.content || '');
     setEditingKeyword(post.keyword || '');
+    setEditingTags(post.tags || '');
     setEditingTimeValue(
       toLocalDateTimeString(post.scheduled_at) || toLocalDateTimeString(new Date()),
     );
@@ -169,6 +185,16 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                           #{post.keyword}
                         </span>
                       )}
+                      {post.tags
+                        ? post.tags.split(',').map((t, idx) => (
+                            <span
+                              key={idx}
+                              className="badge badge-primary badge-outline badge-xs font-bold text-[10px]"
+                            >
+                              {t.trim()}
+                            </span>
+                          ))
+                        : null}
                     </div>
 
                     {editingPostId === post.id ? (
@@ -194,6 +220,18 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                             onChange={(e) => setEditingKeyword(e.target.value)}
                             className="input input-bordered input-sm w-full bg-base-100 font-semibold"
                             placeholder="예약 키워드"
+                          />
+                        </div>
+                        <div>
+                          <label className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                            태그 (콤마 구분)
+                          </label>
+                          <input
+                            type="text"
+                            value={editingTags}
+                            onChange={(e) => setEditingTags(e.target.value)}
+                            className="input input-bordered input-sm w-full bg-base-100 font-semibold"
+                            placeholder="맛집,데이트"
                           />
                         </div>
                         <div>
@@ -242,10 +280,21 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                       </div>
                     ) : (
                       <>
-                        <h4 className="font-extrabold text-sm text-base-content truncate pr-1">
-                          {post.title}
-                        </h4>
-                        <div className="text-[11px] text-base-content/40 mt-2 font-semibold flex items-center gap-2">
+                        <div className="flex items-center gap-3">
+                          {getThumbnail(post.image_url) ? (
+                            <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-base-300">
+                              <img
+                                src={getThumbnail(post.image_url)}
+                                alt="thumbnail"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          ) : null}
+                          <h4 className="font-extrabold text-sm text-base-content truncate pr-1">
+                            {post.title}
+                          </h4>
+                        </div>
+                        <div className="text-[11px] text-base-content/40 mt-2 font-semibold flex items-center gap-2 flex-wrap">
                           {post.scheduled_at ? (
                             <span className="text-warning font-bold text-xs bg-warning/10 px-2 py-0.5 rounded-md">
                               📅 {parseUtcDate(post.scheduled_at)?.toLocaleString('ko-KR') || '-'}
@@ -255,6 +304,18 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                               ⏳ 즉시 (스케줄러 기동 시)
                             </span>
                           )}
+                          {post.republish_interval_ms > 0 && post.scheduled_at ? (
+                            <span
+                              className="text-secondary font-bold text-[10px] bg-secondary/10 px-2 py-0.5 rounded-md"
+                              title="발행 완료 후 동일 키워드로 새 원고가 자동 생성·예약됩니다"
+                            >
+                              🔁 다음 재발행:{' '}
+                              {new Date(
+                                parseUtcDate(post.scheduled_at).getTime() +
+                                  post.republish_interval_ms,
+                              ).toLocaleString('ko-KR')}
+                            </span>
+                          ) : null}
                           <button
                             onClick={() => startEditing(post)}
                             className="btn btn-xs btn-ghost btn-circle text-[10px] w-5 h-5 min-h-0 cursor-pointer border border-base-300 hover:bg-base-300"
@@ -297,17 +358,16 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                     </div>
                   )}
                 </div>
-                {editingPostId !== post.id && expandedPostIds[post.id] && post.content && (
+                {editingPostId !== post.id && expandedPostIds[post.id] && post.content ? (
                   <div className="text-xs text-base-content/75 bg-base-200/50 p-2.5 rounded-lg max-h-40 overflow-y-auto leading-relaxed font-medium whitespace-pre-wrap border border-base-300/40 animate-in slide-in-from-top-1 duration-150">
                     {post.content}
                   </div>
-                )}
+                ) : null}
               </div>
             ))}
           </div>
         )}
       </Card>
-
       {/* ── 최근 발행 이력 ── */}
       <Card>
         <SectionTitle className="mb-4 pb-2">
@@ -340,12 +400,23 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                         @{post.naver_id || 'unknown'}
                       </span>
                     </div>
-                    <h4
-                      className="font-extrabold text-sm text-base-content truncate pr-1"
-                      title={post.title}
-                    >
-                      {post.title}
-                    </h4>
+                    <div className="flex items-center gap-3">
+                      {getThumbnail(post.image_url) ? (
+                        <div className="w-10 h-10 rounded-md overflow-hidden shrink-0 border border-base-300">
+                          <img
+                            src={getThumbnail(post.image_url)}
+                            alt="thumbnail"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : null}
+                      <h4
+                        className="font-extrabold text-sm text-base-content truncate pr-1"
+                        title={post.title}
+                      >
+                        {post.title}
+                      </h4>
+                    </div>
                   </div>
                   <div className="flex gap-1 shrink-0 ml-1">
                     <button

@@ -39,6 +39,7 @@ const GenerateTab = React.memo(
     const [manualTitle, setManualTitle] = useState('');
     const [manualContent, setManualContent] = useState('');
     const [manualImageUrl, setManualImageUrl] = useState('');
+    const [manualTags, setManualTags] = useState('');
     const [manualPosting, setManualPosting] = useState(false);
     const [manualScheduling, setManualScheduling] = useState(false);
     const [manualScheduledAt, setManualScheduledAt] = useState('');
@@ -80,6 +81,7 @@ const GenerateTab = React.memo(
         setManualTitle(reusedPost.title || '');
         setManualContent(reusedPost.content || '');
         setManualImageUrl(reusedPost.image_url || '');
+        setManualTags(reusedPost.tags || '');
         setActiveSubTab('manual');
 
         setTimeout(() => {
@@ -148,6 +150,7 @@ const GenerateTab = React.memo(
             title: '',
             content: data.editedContent,
             imageUrl: '',
+            tags: '',
           });
         } else {
           const data = await apiFetch('/api/generate', {
@@ -178,6 +181,7 @@ const GenerateTab = React.memo(
           title: generated.title,
           content: generated.content,
           image_url: generated.imageUrl || null,
+          tags: generated.tags || '',
           headless,
           account_id: null, // 라운드로빈 강제 적용
         };
@@ -210,6 +214,7 @@ const GenerateTab = React.memo(
             title: generated.title,
             content: generated.content,
             image_url: generated.imageUrl,
+            tags: generated.tags || '',
             headless,
             scheduled_at: finalTime,
           }),
@@ -241,6 +246,7 @@ const GenerateTab = React.memo(
           title: '',
           content: data.editedContent,
           imageUrl: '',
+          tags: '',
         });
         setTimeout(() => {
           const draftContainer = document.getElementById('generated-draft-card');
@@ -262,6 +268,7 @@ const GenerateTab = React.memo(
           title: manualTitle,
           content: manualContent,
           image_url: manualImageUrl.trim() || null,
+          tags: manualTags.trim() || '',
           headless: manualHeadless,
           account_id: null, // 라운드로빈 강제 적용
         };
@@ -274,6 +281,7 @@ const GenerateTab = React.memo(
         setManualTitle('');
         setManualContent('');
         setManualImageUrl('');
+        setManualTags('');
         await fetchAll();
       } catch (err) {
         alert(`수기 발행 실패: ${err.message}`);
@@ -299,6 +307,7 @@ const GenerateTab = React.memo(
             title: manualTitle,
             content: manualContent,
             image_url: manualImageUrl.trim() || null,
+            tags: manualTags.trim() || '',
             headless: manualHeadless,
             scheduled_at: finalTime,
           }),
@@ -310,6 +319,7 @@ const GenerateTab = React.memo(
         setManualTitle('');
         setManualContent('');
         setManualImageUrl('');
+        setManualTags('');
         setManualScheduledAt('');
         await fetchAll();
       } catch (err) {
@@ -560,7 +570,7 @@ const GenerateTab = React.memo(
                   onChange={(e) => setKeywordList(e.target.value)}
                 />
                 {/* 예약된 키워드 배지 목록 표시 */}
-                {activeKeywords.length > 0 && (
+                {activeKeywords.length > 0 ? (
                   <div className="mt-3">
                     <span className="text-xs font-bold text-base-content/60 block mb-1">
                       ⏳ 현재 예약 대기중인 키워드 목록 ({activeKeywords.length}개):
@@ -573,7 +583,7 @@ const GenerateTab = React.memo(
                       ))}
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -718,7 +728,7 @@ const GenerateTab = React.memo(
                 </div>
               </div>
 
-              {import.meta.env.DEV && (
+              {import.meta.env.DEV ? (
                 <div className="form-control bg-base-200/50 p-3 rounded-xl border border-base-300 max-w-xs">
                   <label className="label cursor-pointer justify-start gap-4 py-0">
                     <input
@@ -732,7 +742,7 @@ const GenerateTab = React.memo(
                     </span>
                   </label>
                 </div>
-              )}
+              ) : null}
 
               <div className="pt-2">
                 <button
@@ -771,6 +781,14 @@ const GenerateTab = React.memo(
                 value={manualContent}
                 onChange={(e) => setManualContent(e.target.value)}
               />
+              <Input
+                label="태그 (콤마로 구분, 예: 맛집,여행)"
+                className="font-bold text-sm"
+                type="text"
+                placeholder="태그 입력..."
+                value={manualTags}
+                onChange={(e) => setManualTags(e.target.value)}
+              />
 
               <div className="form-control">
                 <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
@@ -799,7 +817,7 @@ const GenerateTab = React.memo(
                     onChange={(e) => handleImageUpload(e, setManualImageUrl)}
                   />
                 </div>
-                {manualImageUrl && (
+                {manualImageUrl ? (
                   <div className="mt-4 relative group w-full max-w-sm rounded-xl overflow-hidden border border-base-300 shadow-md">
                     <img
                       src={manualImageUrl}
@@ -815,7 +833,7 @@ const GenerateTab = React.memo(
                       ✕
                     </button>
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div className="mt-6 p-5 bg-base-300/40 border border-base-300 rounded-2xl flex flex-col gap-4">
@@ -856,7 +874,7 @@ const GenerateTab = React.memo(
                       <span className="text-xs text-base-content/50 font-semibold">분 랜덤</span>
                     </div>
                   </div>
-                  {import.meta.env.DEV && (
+                  {import.meta.env.DEV ? (
                     <div>
                       <label className="label-text font-bold block mb-2 text-base-content/80">
                         🖥️ 브라우저 실행 방식
@@ -875,15 +893,15 @@ const GenerateTab = React.memo(
                         </label>
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="flex flex-col w-full mt-2">
-                  {accounts.length === 0 && (
+                  {accounts.length === 0 ? (
                     <div className="text-error text-xs font-bold mb-2 text-center bg-error/10 py-1.5 px-2 rounded-md">
                       ⚠️ 계정 관리 탭에서 네이버 계정을 먼저 등록해주세요.
                     </div>
-                  )}
+                  ) : null}
                   <div className="flex gap-3 w-full">
                     <Btn
                       variant="warning"
@@ -917,19 +935,19 @@ const GenerateTab = React.memo(
         </Card>
 
         {/* ── AI 초안 생성 완료 시 편집 에디터 카드 ── */}
-        {generated && (
+        {generated ? (
           <Card
             id="generated-draft-card"
             className="animate-in slide-in-from-bottom-4 duration-500"
           >
             <div className="flex justify-between items-start mb-4">
               <SectionTitle className="mb-0">📄 AI 생성 초안 편집</SectionTitle>
-              {generated.modelUsed && (
+              {generated.modelUsed ? (
                 <div className="badge badge-outline badge-sm py-3 px-3 gap-2 text-base-content/60 border-base-300 font-medium">
                   <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
                   Gemini API 초안 완료
                 </div>
-              )}
+              ) : null}
             </div>
             <div className="bg-base-100 p-6 rounded-2xl border border-base-300 shadow-inner space-y-4">
               <Input
@@ -944,6 +962,13 @@ const GenerateTab = React.memo(
                 className="h-[400px] font-medium leading-8 text-base bg-base-100 border-base-300"
                 value={generated.content}
                 onChange={(e) => setGenerated((prev) => ({ ...prev, content: e.target.value }))}
+              />
+              <Input
+                label="태그 (콤마로 구분, 예: 맛집,여행)"
+                className="font-bold text-sm"
+                type="text"
+                value={generated.tags || ''}
+                onChange={(e) => setGenerated((prev) => ({ ...prev, tags: e.target.value }))}
               />
 
               <div className="form-control">
@@ -979,7 +1004,7 @@ const GenerateTab = React.memo(
                     }
                   />
                 </div>
-                {generated.imageUrl && (
+                {generated.imageUrl ? (
                   <div className="mt-4 relative group w-full max-w-sm rounded-xl overflow-hidden border border-base-300 shadow-md">
                     <img
                       src={generated.imageUrl}
@@ -995,7 +1020,7 @@ const GenerateTab = React.memo(
                       ✕
                     </button>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -1037,7 +1062,7 @@ const GenerateTab = React.memo(
                     <span className="text-xs text-base-content/50 font-semibold">분 랜덤</span>
                   </div>
                 </div>
-                {import.meta.env.DEV && (
+                {import.meta.env.DEV ? (
                   <div>
                     <label className="label-text font-bold block mb-2 text-base-content/80">
                       🖥️ 브라우저 실행 방식
@@ -1056,15 +1081,15 @@ const GenerateTab = React.memo(
                       </label>
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div className="flex flex-col w-full mt-2">
-                {accounts.length === 0 && (
+                {accounts.length === 0 ? (
                   <div className="text-error text-xs font-bold mb-2 text-center bg-error/10 py-1.5 px-2 rounded-md">
                     ⚠️ 계정 관리 탭에서 네이버 계정을 먼저 등록해주세요.
                   </div>
-                )}
+                ) : null}
                 <div className="flex gap-3 w-full">
                   <Btn
                     variant="warning"
@@ -1094,7 +1119,7 @@ const GenerateTab = React.memo(
               </div>
             </div>
           </Card>
-        )}
+        ) : null}
       </div>
     );
   },
