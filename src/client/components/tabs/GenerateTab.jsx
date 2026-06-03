@@ -56,6 +56,7 @@ const GenerateTab = React.memo(
     const [keywordScheduling, setKeywordScheduling] = useState(false);
     const [keywordRepresentativeImages, setKeywordRepresentativeImages] = useState([]);
     const [keywordContentImages, setKeywordContentImages] = useState([]);
+    const [splitRepImages, setSplitRepImages] = useState(true);
 
     // ── 이미지 파일 input refs ──
     const manualImageInputRef = useRef(null);
@@ -397,6 +398,7 @@ const GenerateTab = React.memo(
               representative: keywordRepresentativeImages,
               content: keywordContentImages,
             }),
+            split_rep_images: splitRepImages,
           }),
         });
 
@@ -631,6 +633,20 @@ const GenerateTab = React.memo(
               </div>
 
               <div className="divider my-2">사진 첨부 설정</div>
+
+              <div className="form-control bg-base-200/50 p-3 rounded-xl border border-base-300 max-w-xs mb-4">
+                <label className="label cursor-pointer justify-start gap-4 py-0">
+                  <input
+                    type="checkbox"
+                    className="checkbox checkbox-primary checkbox-sm"
+                    checked={splitRepImages}
+                    onChange={(e) => setSplitRepImages(e.target.checked)}
+                  />
+                  <span className="label-text font-bold text-xs">
+                    대표 사진 글마다 1장씩 순서대로 배분
+                  </span>
+                </label>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* 대표 사진 */}

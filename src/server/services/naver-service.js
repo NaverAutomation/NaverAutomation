@@ -725,14 +725,18 @@ export async function postToNaver(account, post, options = {}) {
 
         let apiKey = null;
         await new Promise((resolve) => {
-          db.get("SELECT value FROM settings WHERE key = 'gemini_api_key'", [], (err, row) => {
-            if (!err && row && row.value) {
-              try {
-                apiKey = decrypt(row.value);
-              } catch {}
-            }
-            resolve();
-          });
+          db.get(
+            "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
+            [post.user_id || null],
+            (err, row) => {
+              if (!err && row && row.value) {
+                try {
+                  apiKey = decrypt(row.value);
+                } catch {}
+              }
+              resolve();
+            },
+          );
         });
 
         if (apiKey && apiKey !== 'YOUR_KEY_HERE') {

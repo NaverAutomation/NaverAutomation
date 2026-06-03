@@ -246,6 +246,7 @@ export async function processScheduledPosts() {
               image_url: post.image_url,
               tags: post.tags,
               keyword: post.keyword,
+              user_id: post.user_id,
             },
             {
               headless: true,
@@ -282,8 +283,8 @@ export async function processScheduledPosts() {
                 // Gemini API 키 조회
                 const apiKey = await new Promise((resolve) => {
                   db.get(
-                    "SELECT value FROM settings WHERE key = 'gemini_api_key'",
-                    [],
+                    "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
+                    [post.user_id],
                     (err, row) => {
                       if (err || !row || !row.value) return resolve(null);
                       try {

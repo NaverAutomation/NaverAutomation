@@ -186,20 +186,24 @@ async function getSettingFromDB(userId, keyName) {
 }
 
 // ── Gemini API 키 리졸브 (Supabase -> 로컬 SQLite DB settings 백업) ──
-async function resolveGeminiApiKey(token) {
+async function resolveGeminiApiKey(userId, token) {
   const key = await getGlobalSetting('master_gemini_api_key', token);
   if (key && key !== 'YOUR_KEY_HERE') return key;
 
   return new Promise((resolve) => {
-    db.get("SELECT value FROM settings WHERE key = 'gemini_api_key'", [], (err, row) => {
-      if (err || !row || !row.value) return resolve(null);
-      try {
-        const decrypted = decrypt(row.value);
-        resolve(decrypted !== 'YOUR_KEY_HERE' ? decrypted : null);
-      } catch {
-        resolve(null);
-      }
-    });
+    db.get(
+      "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
+      [userId || null],
+      (err, row) => {
+        if (err || !row || !row.value) return resolve(null);
+        try {
+          const decrypted = decrypt(row.value);
+          resolve(decrypted !== 'YOUR_KEY_HERE' ? decrypted : null);
+        } catch {
+          resolve(null);
+        }
+      },
+    );
   });
 }
 
@@ -210,13 +214,14 @@ router.post('/generate', async (req, res) => {
 
   try {
     let aiConfig;
+    let apiKey = null;
     if (engine === 'ollama') {
       const endpoint =
         (await getSettingFromDB(req.user.id, 'ollama_endpoint')) || 'http://localhost:11434';
       const model = (await getSettingFromDB(req.user.id, 'ollama_model')) || 'llama3';
       aiConfig = { endpoint, model };
     } else {
-      const apiKey = await resolveGeminiApiKey(req.token);
+      apiKey = await resolveGeminiApiKey(req.user.id, req.token);
       if (!apiKey) {
         return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
       }
@@ -225,7 +230,35 @@ router.post('/generate', async (req, res) => {
     }
 
     const content = await generateContent(engine, aiConfig, keyword);
-    res.json({ ...content, imageUrl: '' }); // OpenAI 제거로 이미지 생성 비활성화
+
+    // AI 이미지 생성 복구 (Gemini API 키가 있을 경우)
+    let imageUrl = '';
+    if (engine === 'gemini' && apiKey) {
+      try {
+        const { generateImageWithGemini } = await import('../services/ai-service.js');
+        const base64Image = await generateImageWithGemini(
+          apiKey,
+          keyword,
+          content.title,
+          content.content,
+        );
+        if (base64Image) {
+          // base64 데이터를 로컬 이미지 파일로 저장하고 URL을 반환
+          const uploadDir = CONFIG.UPLOAD_DIR;
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+          const safeFileName = `${Date.now()}_gen.png`;
+          const filePath = path.join(uploadDir, safeFileName);
+          fs.writeFileSync(filePath, Buffer.from(base64Image, 'base64'));
+          imageUrl = `http://${req.headers.host}/uploads/${safeFileName}`;
+        }
+      } catch (imageErr) {
+        console.error('Gemini image generation error during /generate:', imageErr.message);
+      }
+    }
+
+    res.json({ ...content, imageUrl });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -268,7 +301,7 @@ router.post('/generate/edit', async (req, res) => {
       const data = await response.json();
       editedContent = data.response;
     } else {
-      const apiKey = await resolveGeminiApiKey(req.token);
+      const apiKey = await resolveGeminiApiKey(req.user.id, req.token);
       if (!apiKey) {
         return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
       }
@@ -444,6 +477,7 @@ router.post('/posts/schedule-keywords', async (req, res) => {
     headless,
     engine = 'gemini',
     image_url, // Storing JSON string containing representative and content images
+    split_rep_images,
   } = req.body;
 
   if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
@@ -461,7 +495,7 @@ router.post('/posts/schedule-keywords', async (req, res) => {
       const model = (await getSettingFromDB(req.user.id, 'ollama_model')) || 'llama3';
       aiConfig = { endpoint, model };
     } else {
-      const apiKey = await resolveGeminiApiKey(req.token);
+      const apiKey = await resolveGeminiApiKey(req.user.id, req.token);
       if (!apiKey) {
         return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
       }
@@ -508,10 +542,21 @@ router.post('/posts/schedule-keywords', async (req, res) => {
           );
         }
 
-        const repImg = repImages.length > 0 ? repImages[i % repImages.length] : null;
+        let repImgList = [];
+        if (split_rep_images !== false) {
+          const repImg = repImages.length > 0 ? repImages[i % repImages.length] : null;
+          repImgList = repImg ? [repImg] : [];
+        } else {
+          repImgList = repImages;
+        }
+
+        const contentImg =
+          contentImages.length > 0 ? contentImages[i % contentImages.length] : null;
+        const contentImgList = contentImg ? [contentImg] : [];
+
         const finalImageUrl = JSON.stringify({
-          representative: repImg ? [repImg] : [],
-          content: contentImages,
+          representative: repImgList,
+          content: contentImgList,
         });
 
         // 1분 ~ 2분 사이의 랜덤 오차 추가
@@ -609,7 +654,7 @@ router.patch('/posts/scheduled/:id', (req, res) => {
       if (newKeyword && newKeyword !== oldKeyword) {
         try {
           const engine = 'gemini';
-          const apiKey = await resolveGeminiApiKey(req.token);
+          const apiKey = await resolveGeminiApiKey(req.user.id, req.token);
           if (!apiKey) {
             return res.status(500).json({ error: 'AI 재생성 실패: API 키가 유효하지 않습니다.' });
           }
@@ -729,7 +774,11 @@ router.post('/post', async (req, res) => {
 
     emitLog('info', `[수기 발행] 계정 ${account.naver_id}로 포스팅을 시작합니다.`, req.user.id);
     const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
-    const result = await postToNaver(decryptedAccount, { title, content, image_url }, { headless });
+    const result = await postToNaver(
+      decryptedAccount,
+      { title, content, image_url, user_id: req.user.id },
+      { headless },
+    );
 
     const status = result.success ? 'published' : 'failed';
     db.run(
@@ -764,7 +813,7 @@ router.post('/post', async (req, res) => {
 router.post('/task/start', async (req, res) => {
   // 스케줄러 시작 전, 유저 토큰으로 Gemini API 키를 선제적으로 캐시
   try {
-    const masterKey = await resolveGeminiApiKey(req.token);
+    const masterKey = await resolveGeminiApiKey(req.user.id, req.token);
     if (masterKey) {
       // 가져온 유효 키를 캐시 충전
       import('../utils/supabase.js').then(({ setGlobalSettingCache }) => {
