@@ -248,7 +248,8 @@ export async function processScheduledPosts() {
               image_url: post.image_url,
             },
             {
-              headless: post.headless === 1,
+              headless: true,
+              isScheduler: true,
               onProgress: (level, msg) => emitLog(level, msg, post.user_id),
             },
           );

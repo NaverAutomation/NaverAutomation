@@ -575,9 +575,14 @@ export async function postToNaver(account, post, options = {}) {
       typeof options.headless === 'boolean' ? options.headless : CONFIG.HEADLESS;
 
     // 개발 환경일 경우에는 디버깅하기 쉽게 헤드리스 모드를 해제하고 브라우저 창을 표시합니다.
+    // 단, 스케줄러를 통한 예약 발행이거나 명시적으로 headless가 true인 경우에는 개발 환경이더라도 헤드리스로 작동할 수 있도록 합니다.
     if (process.env.NODE_ENV === 'development') {
-      console.log('[Dev Mode] Auto-disabling headless mode to display browser window.');
-      effectiveHeadless = false;
+      if (options.isScheduler || options.headless === true) {
+        effectiveHeadless = true;
+      } else {
+        console.log('[Dev Mode] Auto-disabling headless mode to display browser window.');
+        effectiveHeadless = false;
+      }
     }
 
     if (onProgress) onProgress('info', '브라우저를 실행하는 중...');
