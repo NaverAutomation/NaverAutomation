@@ -310,7 +310,7 @@ async function inputTags(page, tags) {
   try {
     const tagInput = page.locator('#tag-input');
     await tagInput.waitFor({ state: 'visible', timeout: 5000 });
-    
+
     for (const tag of tags) {
       await tagInput.fill(tag);
       await page.keyboard.press('Enter');

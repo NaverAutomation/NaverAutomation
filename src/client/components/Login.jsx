@@ -88,10 +88,6 @@ const Login = ({ onLogin }) => {
               </button>
             </div>
           </form>
-
-          <div className="mt-6 text-xs text-center text-base-content/40">
-            관리자 계정으로만 접속 가능합니다.
-          </div>
         </div>
       </div>
     </div>

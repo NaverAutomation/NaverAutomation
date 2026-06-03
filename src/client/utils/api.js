@@ -1,9 +1,20 @@
 import { supabase } from './supabase.js';
 
+let cachedSessionPromise = null;
+
+async function getDeduplicatedSession() {
+  if (!cachedSessionPromise) {
+    cachedSessionPromise = supabase.auth.getSession().finally(() => {
+      cachedSessionPromise = null;
+    });
+  }
+  return cachedSessionPromise;
+}
+
 export async function apiFetch(url, options = {}) {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await getDeduplicatedSession();
   const token = session?.access_token;
 
   const res = await fetch(url, {

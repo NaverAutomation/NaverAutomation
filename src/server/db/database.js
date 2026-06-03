@@ -70,6 +70,8 @@ function initializeDatabase() {
       scheduled_at DATETIME,
       status TEXT DEFAULT 'pending',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      post_type TEXT DEFAULT 'manual',
+      campaign_id INTEGER,
       FOREIGN KEY (account_id) REFERENCES accounts (id)
     )`,
       (err) => {
@@ -77,13 +79,12 @@ function initializeDatabase() {
           console.error('Error creating posts table:', err.message);
         } else {
           // 기존 DB에 컬럼 추가 (없을 경우)
-          db.run('ALTER TABLE posts ADD COLUMN user_id TEXT', () => {});
-          db.run(
-            'ALTER TABLE posts ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
-            () => {},
-          );
-          db.run('ALTER TABLE posts ADD COLUMN scheduled_at DATETIME', () => {});
-          db.run('ALTER TABLE posts ADD COLUMN headless INTEGER', () => {});
+          addColumnIfNotExists('posts', 'user_id', 'TEXT');
+          addColumnIfNotExists('posts', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
+          addColumnIfNotExists('posts', 'scheduled_at', 'DATETIME');
+          addColumnIfNotExists('posts', 'headless', 'INTEGER');
+          addColumnIfNotExists('posts', 'post_type', "TEXT DEFAULT 'manual'");
+          addColumnIfNotExists('posts', 'campaign_id', 'INTEGER');
         }
       },
     );
@@ -120,6 +121,28 @@ function initializeDatabase() {
         }
       },
     );
+  });
+}
+
+function addColumnIfNotExists(tableName, columnName, columnDefinition) {
+  db.all(`PRAGMA table_info(${tableName})`, (err, rows) => {
+    if (err) {
+      console.error(`Error checking columns for ${tableName}:`, err.message);
+      return;
+    }
+    const exists = rows.some((row) => row.name === columnName);
+    if (!exists) {
+      db.run(
+        `ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`,
+        (alterErr) => {
+          if (alterErr) {
+            console.error(`Error adding column ${columnName} to ${tableName}:`, alterErr.message);
+          } else {
+            console.log(`Column ${columnName} successfully added to ${tableName}.`);
+          }
+        },
+      );
+    }
   });
 }
 

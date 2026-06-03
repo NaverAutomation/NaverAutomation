@@ -2,8 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { apiFetch, parseUtcDate } from '../../utils/api';
 import { Btn, Card, Input, SectionTitle, StatusBadge, Textarea } from '../common';
 
+const EMPTY_ARRAY = [];
+
+// ── 랜덤 오프셋 적용 헬퍼 (Hoisted outside component) ──
+const applyRandomOffset = (isoString, offsetMin) => {
+  const offsetMs = (Math.random() * 2 - 1) * offsetMin * 60 * 1000;
+  return new Date(new Date(isoString).getTime() + offsetMs).toISOString();
+};
+
 const GenerateTab = React.memo(
-  ({ accounts, campaigns = [], fetchAll, reusedPost, clearReusedPost }) => {
+  ({ accounts, campaigns = EMPTY_ARRAY, fetchAll, reusedPost, clearReusedPost }) => {
     // ── UI 및 전환 상태 ──
     const [activeSubTab, setActiveSubTab] = useState('ai'); // 'ai' 또는 'manual'
     const [campaignsExpanded, setCampaignsExpanded] = useState(false); // 작업대상 포스트 등록 아코디언 상태
@@ -41,6 +49,16 @@ const GenerateTab = React.memo(
     const [manualRandomOffset, setManualRandomOffset] = useState(30);
     const [manualUseRandomOffset, setManualUseRandomOffset] = useState(false);
 
+    // ── 자동 키워드 예약 상태 ──
+    const [keywordList, setKeywordList] = useState('');
+    const [keywordStartTime, setKeywordStartTime] = useState('');
+    const [keywordInterval, setKeywordInterval] = useState(3);
+    const [keywordSelectedAccountId, setKeywordSelectedAccountId] = useState('');
+    const [keywordUseRoundRobin, setKeywordUseRoundRobin] = useState(true);
+    const [keywordHeadless, setKeywordHeadless] = useState(true);
+    const [keywordEngine, setKeywordEngine] = useState('gemini');
+    const [keywordScheduling, setKeywordScheduling] = useState(false);
+
     // ── 이미지 파일 input refs ──
     const manualImageInputRef = useRef(null);
     const generatedImageInputRef = useRef(null);
@@ -73,8 +91,9 @@ const GenerateTab = React.memo(
       if (accounts.length > 0) {
         if (!selectedAccountId) setSelectedAccountId(accounts[0].id.toString());
         if (!manualSelectedAccountId) setManualSelectedAccountId(accounts[0].id.toString());
+        if (!keywordSelectedAccountId) setKeywordSelectedAccountId(accounts[0].id.toString());
       }
-    }, [accounts, selectedAccountId, manualSelectedAccountId]);
+    }, [accounts, selectedAccountId, manualSelectedAccountId, keywordSelectedAccountId]);
 
     // ── 이미지 업로드 핸들러 ──
     const handleImageUpload = async (e, setUrlCallback) => {
@@ -183,12 +202,6 @@ const GenerateTab = React.memo(
         alert(`발행 실패: ${err.message}`);
       }
       setPosting(false);
-    };
-
-    // ── 랜덤 오프셋 적용 헬퍼 ──
-    const applyRandomOffset = (isoString, offsetMin) => {
-      const offsetMs = (Math.random() * 2 - 1) * offsetMin * 60 * 1000;
-      return new Date(new Date(isoString).getTime() + offsetMs).toISOString();
     };
 
     // ── AI 초안 타이머 예약 ──
@@ -316,6 +329,46 @@ const GenerateTab = React.memo(
       setManualScheduling(false);
     };
 
+    // ── 자동 키워드 일괄 예약 등록 ──
+    const handleKeywordSchedule = async (e) => {
+      e.preventDefault();
+      const lines = keywordList
+        .split('\n')
+        .map((k) => k.trim())
+        .filter(Boolean);
+      if (lines.length === 0) return alert('키워드를 최소 1개 이상 입력하세요.');
+      if (!keywordStartTime) return alert('예약 시작 시간을 설정하세요.');
+      if (!keywordUseRoundRobin && !keywordSelectedAccountId) return alert('계정을 선택하세요.');
+
+      setKeywordScheduling(true);
+      try {
+        const res = await apiFetch('/api/posts/schedule-keywords', {
+          method: 'POST',
+          body: JSON.stringify({
+            keywords: lines,
+            start_time: new Date(keywordStartTime).toISOString(),
+            interval_hours: Number(keywordInterval),
+            account_id: keywordUseRoundRobin ? null : keywordSelectedAccountId,
+            use_round_robin: keywordUseRoundRobin,
+            headless: keywordHeadless,
+            engine: keywordEngine,
+          }),
+        });
+
+        if (res.success) {
+          alert('자동 키워드 예약이 모두 성공적으로 대기열에 추가되었습니다!');
+          setKeywordList('');
+          setKeywordStartTime('');
+          await fetchAll();
+        } else {
+          alert(`예약 실패: ${res.error || '알 수 없는 오류'}`);
+        }
+      } catch (err) {
+        alert(`예약 오류: ${err.message}`);
+      }
+      setKeywordScheduling(false);
+    };
+
     // ── 24/7 자동화 작업대상 포스트(캠페인) 추가 ──
     const handleAddCampaign = async (e) => {
       e.preventDefault();
@@ -323,13 +376,15 @@ const GenerateTab = React.memo(
 
       setCampaignSubmitting(true);
       try {
-        const campaign = await apiFetch('/api/campaigns', {
+        await apiFetch('/api/campaigns', {
           method: 'POST',
           body: JSON.stringify(newCampaign),
         });
-        
+
         // 추가: 바로 발행/예약 옵션
-        const action = window.confirm('작업대상 포스트 등록 완료! 이 글을 즉시 발행하시겠습니까? (취소하면 예약 설정)');
+        const action = window.confirm(
+          '작업대상 포스트 등록 완료! 이 글을 즉시 발행하시겠습니까? (취소하면 예약 설정)',
+        );
         if (action) {
           // 즉시 발행
           await apiFetch('/api/post', {
@@ -438,7 +493,17 @@ const GenerateTab = React.memo(
                     : 'text-base-content/60 hover:text-base-content font-bold'
                 }`}
               >
-                ✨ AI 블로그 원고 생성기
+                ✨ AI 초안 생성
+              </button>
+              <button
+                onClick={() => setActiveSubTab('keyword')}
+                className={`flex-1 py-3 text-center rounded-lg font-black text-sm transition-all duration-200 cursor-pointer ${
+                  activeSubTab === 'keyword'
+                    ? 'bg-primary text-primary-content shadow-md scale-[1.01]'
+                    : 'text-base-content/60 hover:text-base-content font-bold'
+                }`}
+              >
+                📅 자동 키워드 예약
               </button>
               <button
                 onClick={() => setActiveSubTab('manual')}
@@ -448,11 +513,11 @@ const GenerateTab = React.memo(
                     : 'text-base-content/60 hover:text-base-content font-bold'
                 }`}
               >
-                ✍️ 수기 직접 작성 및 즉시발행
+                ✍️ 수기 직접 작성
               </button>
             </div>
 
-            {activeSubTab === 'ai' ? (
+            {activeSubTab === 'ai' && (
               /* ── AI 원고 생성기 폼 ── */
               <div className="space-y-6">
                 {/* 모드 토글: 새 글 생성 vs 기존 글 수정 */}
@@ -565,7 +630,155 @@ const GenerateTab = React.memo(
                   </div>
                 )}
               </div>
-            ) : (
+            )}
+
+            {activeSubTab === 'keyword' && (
+              /* ── 자동 키워드 예약 폼 ── */
+              <form onSubmit={handleKeywordSchedule} className="space-y-4">
+                <SectionTitle className="text-primary font-black mb-2">
+                  📅 자동 키워드 일괄 예약 등록
+                </SectionTitle>
+                <p className="text-xs text-base-content/60 leading-normal">
+                  여러 개의 키워드를 한 줄에 하나씩 입력하면, AI가 각 키워드별 원고를 자동으로 미리
+                  생성한 뒤 설정한 시간 간격대로 예약 대기열에 등록합니다.
+                </p>
+
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text font-bold text-xs text-base-content/80">
+                      키워드 목록 (한 줄에 하나씩 입력)
+                    </span>
+                  </label>
+                  <textarea
+                    rows={6}
+                    className="textarea textarea-bordered bg-base-100 font-semibold leading-normal w-full"
+                    placeholder="예:&#10;아이폰17 출시일 루머 정리&#10;갤럭시 S26 울트라 상세 스펙&#10;2026년 전기차 보조금 혜택"
+                    value={keywordList}
+                    onChange={(e) => setKeywordList(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text font-bold text-xs text-base-content/80">
+                        첫 번째 글 예약 시작 시간
+                      </span>
+                    </label>
+                    <input
+                      type="datetime-local"
+                      className="input input-bordered bg-base-100 font-semibold text-xs"
+                      value={keywordStartTime}
+                      onChange={(e) => setKeywordStartTime(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text font-bold text-xs text-base-content/80">
+                        발행 시간 간격 (시간 단위)
+                      </span>
+                    </label>
+                    <select
+                      className="select select-bordered bg-base-100 font-bold"
+                      value={keywordInterval}
+                      onChange={(e) => setKeywordInterval(Number(e.target.value))}
+                    >
+                      <option value={1}>1시간마다</option>
+                      <option value={2}>2시간마다</option>
+                      <option value={3}>3시간마다</option>
+                      <option value={6}>6시간마다</option>
+                      <option value={12}>12시간마다</option>
+                      <option value={24}>24시간(하루)마다</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="divider my-2">발행 및 계정 옵션</div>
+
+                <div className="form-control">
+                  <label className="label cursor-pointer justify-start gap-4">
+                    <input
+                      type="checkbox"
+                      className="checkbox checkbox-primary"
+                      checked={keywordUseRoundRobin}
+                      onChange={(e) => setKeywordUseRoundRobin(e.target.checked)}
+                    />
+                    <span className="label-text font-bold text-xs">
+                      🔄 활성 계정간 자동 순환 배분 (라운드로빈)
+                    </span>
+                  </label>
+                </div>
+
+                {!keywordUseRoundRobin && (
+                  <div className="form-control animate-in fade-in duration-200">
+                    <label className="label">
+                      <span className="label-text font-bold text-xs">발행 계정 선택</span>
+                    </label>
+                    <select
+                      className="select select-bordered bg-base-100 font-bold"
+                      value={keywordSelectedAccountId}
+                      onChange={(e) => setKeywordSelectedAccountId(e.target.value)}
+                    >
+                      {accounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.naver_id} ({acc.status})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="form-control">
+                    <label className="label cursor-pointer justify-start gap-4">
+                      <input
+                        type="checkbox"
+                        className="checkbox checkbox-secondary"
+                        checked={keywordHeadless}
+                        onChange={(e) => setKeywordHeadless(e.target.checked)}
+                      />
+                      <span className="label-text font-bold text-xs">
+                        🕵️ 브라우저 백그라운드 실행 (Headless)
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="form-control">
+                    <label className="label py-0.5">
+                      <span className="label-text font-bold text-xs">AI 글 작성 엔진</span>
+                    </label>
+                    <select
+                      className="select select-bordered select-sm bg-base-100 font-bold"
+                      value={keywordEngine}
+                      onChange={(e) => setKeywordEngine(e.target.value)}
+                    >
+                      <option value="gemini">Google Gemini</option>
+                      <option value="ollama">Ollama (로컬 AI)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-2">
+                  <button
+                    type="submit"
+                    className="btn btn-primary w-full font-extrabold cursor-pointer"
+                    disabled={keywordScheduling}
+                  >
+                    {keywordScheduling ? (
+                      <div className="flex items-center gap-2">
+                        <span className="loading loading-spinner loading-sm"></span>
+                        <span>AI 원고 생성 및 예약 등록 중...</span>
+                      </div>
+                    ) : (
+                      '📅 일괄 예약 생성 및 대기열 등록'
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {activeSubTab === 'manual' && (
               /* ── 수기 직접 작성 폼 ── */
               <div className="space-y-4">
                 <Input

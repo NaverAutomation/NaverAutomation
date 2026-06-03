@@ -1,3 +1,4 @@
+import { getSchedulerStatus, startScheduler } from '../services/scheduler.js';
 import { getCachedGlobalSetting, getGlobalSetting, supabase } from '../utils/supabase.js';
 
 export async function requireAuth(req, res, next) {
@@ -19,11 +20,26 @@ export async function requireAuth(req, res, next) {
   req.user = user;
   req.token = token;
 
-  // ── Gemini API 키 백그라운드 자동 캐시 충전 (Auto-hydration) ──
+  // ── Gemini API 키 백그라운드 자동 캐시 충전 (Auto-hydration) 및 스케줄러 기동 ──
   if (!getCachedGlobalSetting('master_gemini_api_key')) {
-    getGlobalSetting('master_gemini_api_key', token).catch((e) => {
-      console.warn('[Auth/Cache] Background Gemini key prefetch failed:', e.message);
-    });
+    getGlobalSetting('master_gemini_api_key', token)
+      .then((key) => {
+        if (key && key !== 'YOUR_KEY_HERE') {
+          if (!getSchedulerStatus().isRunning) {
+            startScheduler();
+            console.log(
+              '[Auth/Cache] Scheduler successfully started after prefetching Gemini key.',
+            );
+          }
+        }
+      })
+      .catch((e) => {
+        console.warn('[Auth/Cache] Background Gemini key prefetch failed:', e.message);
+      });
+  } else {
+    if (!getSchedulerStatus().isRunning) {
+      startScheduler();
+    }
   }
 
   next();

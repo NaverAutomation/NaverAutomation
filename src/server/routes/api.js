@@ -11,6 +11,7 @@ import {
   getAvailableAccount,
   getSchedulerStatus,
   performTask,
+  processAutomation,
   processScheduledPosts,
   startScheduler,
   stopScheduler,
@@ -186,6 +187,24 @@ async function getSettingFromDB(userId, keyName) {
   });
 }
 
+// ── Gemini API 키 리졸브 (Supabase -> 로컬 SQLite DB settings 백업) ──
+async function resolveGeminiApiKey(token) {
+  const key = await getGlobalSetting('master_gemini_api_key', token);
+  if (key && key !== 'YOUR_KEY_HERE') return key;
+
+  return new Promise((resolve) => {
+    db.get("SELECT value FROM settings WHERE key = 'gemini_api_key'", [], (err, row) => {
+      if (err || !row || !row.value) return resolve(null);
+      try {
+        const decrypted = decrypt(row.value);
+        resolve(decrypted !== 'YOUR_KEY_HERE' ? decrypted : null);
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
+
 // POST /generate  (원고 생성)
 router.post('/generate', async (req, res) => {
   const { keyword, engine = 'gemini' } = req.body;
@@ -199,12 +218,10 @@ router.post('/generate', async (req, res) => {
       const model = (await getSettingFromDB(req.user.id, 'ollama_model')) || 'llama3';
       aiConfig = { endpoint, model };
     } else {
-      const masterKey = await getGlobalSetting('master_gemini_api_key', req.token);
-      if (!masterKey || masterKey === 'YOUR_KEY_HERE') {
+      const apiKey = await resolveGeminiApiKey(req.token);
+      if (!apiKey) {
         return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
       }
-
-      const apiKey = masterKey;
       const model = (await getSettingFromDB(req.user.id, 'gemini_model')) || 'auto';
       aiConfig = { apiKey, model };
     }
@@ -253,12 +270,10 @@ router.post('/generate/edit', async (req, res) => {
       const data = await response.json();
       editedContent = data.response;
     } else {
-      const masterKey = await getGlobalSetting('master_gemini_api_key', req.token);
-      if (!masterKey || masterKey === 'YOUR_KEY_HERE') {
+      const apiKey = await resolveGeminiApiKey(req.token);
+      if (!apiKey) {
         return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
       }
-
-      const apiKey = masterKey;
       const geminiModelPreference = (await getSettingFromDB(req.user.id, 'gemini_model')) || 'auto';
 
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
@@ -349,6 +364,16 @@ router.patch('/campaigns/:id/status', (req, res) => {
     [status, req.params.id, req.user.id],
     (err) => {
       if (err) return res.status(500).json({ error: err.message });
+
+      // 활성화 시 즉시 스케줄러 기동 및 자동화 루프 예약 생성 트리거
+      if (status === 'active') {
+        if (!getSchedulerStatus().isRunning) {
+          startScheduler();
+        } else {
+          processAutomation();
+        }
+      }
+
       res.json({ success: true, status });
     },
   );
@@ -480,7 +505,15 @@ router.post('/posts/:id/retry', (req, res) => {
 
 // POST /posts/schedule
 router.post('/posts/schedule', (req, res) => {
-  const { account_id, title, content, image_url, scheduled_at, headless } = req.body;
+  const {
+    account_id,
+    title,
+    content,
+    image_url,
+    scheduled_at,
+    headless,
+    post_type = 'manual',
+  } = req.body;
   if (!title || !content) return res.status(400).json({ error: '제목과 내용은 필수입니다.' });
 
   // 5분 ~ 10분 사이의 랜덤한 오차(300,000ms ~ 600,000ms) 추가 적용
@@ -492,7 +525,7 @@ router.post('/posts/schedule', (req, res) => {
 
   const status = finalScheduledAt ? 'scheduled' : 'pending';
   const sql =
-    'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+    'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
   db.run(
     sql,
     [
@@ -504,6 +537,7 @@ router.post('/posts/schedule', (req, res) => {
       headless ? 1 : 0,
       finalScheduledAt || null,
       status,
+      post_type,
     ],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
@@ -513,6 +547,113 @@ router.post('/posts/schedule', (req, res) => {
       res.json({ id: this.lastID, status });
     },
   );
+});
+
+// POST /posts/schedule-keywords  (자동 키워드 예약 일괄 생성)
+router.post('/posts/schedule-keywords', async (req, res) => {
+  const {
+    keywords,
+    start_time,
+    interval_hours,
+    account_id,
+    use_round_robin,
+    headless,
+    engine = 'gemini',
+  } = req.body;
+
+  if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+    return res.status(400).json({ error: '키워드 목록이 비어있습니다.' });
+  }
+  if (!start_time) {
+    return res.status(400).json({ error: '시작 예약 시간이 필요합니다.' });
+  }
+
+  try {
+    let aiConfig;
+    if (engine === 'ollama') {
+      const endpoint =
+        (await getSettingFromDB(req.user.id, 'ollama_endpoint')) || 'http://localhost:11434';
+      const model = (await getSettingFromDB(req.user.id, 'ollama_model')) || 'llama3';
+      aiConfig = { endpoint, model };
+    } else {
+      const apiKey = await resolveGeminiApiKey(req.token);
+      if (!apiKey) {
+        return res.status(500).json({ error: `API 호출에 실패했습니다. 관리자에게 문의하세요.` });
+      }
+      const model = (await getSettingFromDB(req.user.id, 'gemini_model')) || 'auto';
+      aiConfig = { apiKey, model };
+    }
+
+    const results = [];
+    let currentScheduledTime = new Date(start_time);
+
+    // 순차적으로 생성하여 네이버 제재 및 동시 API 요청 제한 방지
+    for (let i = 0; i < keywords.length; i++) {
+      const keyword = keywords[i].trim();
+      if (!keyword) continue;
+
+      emitLog(
+        'info',
+        `[자동 키워드 예약] 키워드 "${keyword}" 원고 생성 및 예약 등록 중 (${i + 1}/${keywords.length})`,
+        req.user.id,
+      );
+
+      try {
+        const content = await generateContent(engine, aiConfig, keyword);
+
+        // 5분 ~ 10분 사이의 랜덤 오차 추가
+        const randomOffsetMs = 300000 + Math.random() * 300000;
+        const scheduledTimeWithOffset = new Date(currentScheduledTime.getTime() + randomOffsetMs);
+        const finalScheduledAt = scheduledTimeWithOffset.toISOString();
+
+        await new Promise((resolve, reject) => {
+          const sql =
+            'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+          db.run(
+            sql,
+            [
+              req.user.id,
+              use_round_robin ? null : account_id || null,
+              content.title,
+              content.content,
+              null,
+              headless ? 1 : 0,
+              finalScheduledAt,
+              'scheduled',
+              'keyword',
+            ],
+            function (err) {
+              if (err) reject(err);
+              else resolve(this.lastID);
+            },
+          );
+        });
+
+        results.push({ keyword, success: true, time: finalScheduledAt });
+      } catch (err) {
+        emitLog(
+          'error',
+          `[자동 키워드 예약] 키워드 "${keyword}" 생성 실패: ${err.message}`,
+          req.user.id,
+        );
+        results.push({ keyword, success: false, error: err.message });
+      }
+
+      // 다음 예약 시각 계산 (interval_hours 가 적용됨)
+      currentScheduledTime = new Date(
+        currentScheduledTime.getTime() + interval_hours * 60 * 60 * 1000,
+      );
+    }
+
+    if (!getSchedulerStatus().isRunning) {
+      startScheduler();
+      emitLog('info', '[자동 키워드 예약] 스케줄러가 기동되었습니다.', req.user.id);
+    }
+
+    res.json({ success: true, results });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // DELETE /posts/scheduled/:id
@@ -649,12 +790,16 @@ router.post('/post', async (req, res) => {
 router.post('/task/start', async (req, res) => {
   // 스케줄러 시작 전, 유저 토큰으로 Gemini API 키를 선제적으로 캐시
   try {
-    const masterKey = await getGlobalSetting('master_gemini_api_key', req.token);
+    const masterKey = await resolveGeminiApiKey(req.token);
     if (masterKey) {
-      console.log('[Task/Start] Gemini API key prefetched and cached successfully.');
+      // 가져온 유효 키를 캐시 충전
+      import('../utils/supabase.js').then(({ setGlobalSettingCache }) => {
+        setGlobalSettingCache('master_gemini_api_key', masterKey);
+      });
+      console.log('[Task/Start] Gemini API key resolved and cached successfully.');
     }
   } catch (e) {
-    console.warn('[Task/Start] Failed to prefetch Gemini API key:', e.message);
+    console.warn('[Task/Start] Failed to resolve Gemini API key:', e.message);
   }
 
   const result = startScheduler();

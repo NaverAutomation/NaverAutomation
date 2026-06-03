@@ -2,20 +2,20 @@ import React, { useState } from 'react';
 import { apiFetch, parseUtcDate } from '../../utils/api';
 import { Card, SectionTitle, StatusBadge } from '../common';
 
+// ── UTC 시간을 로컬 datetime-local 포맷(YYYY-MM-DDTHH:MM)으로 변환 (Hoisted outside component) ──
+const toLocalDateTimeString = (utcString) => {
+  if (!utcString) return '';
+  const date = new Date(utcString);
+  if (Number.isNaN(date.getTime())) return '';
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+};
+
 const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReusePost }) => {
   // ── 예약 수정 상태 ──
   const [editingPostId, setEditingPostId] = useState(null);
   const [editingTimeValue, setEditingTimeValue] = useState('');
   const [expandedPostIds, setExpandedPostIds] = useState({});
-
-  // ── UTC 시간을 로컬 datetime-local 포맷(YYYY-MM-DDTHH:MM)으로 변환 ──
-  const toLocalDateTimeString = (utcString) => {
-    if (!utcString) return '';
-    const date = new Date(utcString);
-    if (Number.isNaN(date.getTime())) return '';
-    const offset = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-  };
 
   // ── 예약 발행 취소 ──
   const handleCancelSchedule = async (id) => {
@@ -126,6 +126,21 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                       <span className="badge badge-neutral badge-xs font-mono font-bold opacity-60">
                         {post.naver_id ? `@${post.naver_id}` : '🔄 자동'}
                       </span>
+                      {post.post_type === 'automation' && (
+                        <span className="badge badge-primary badge-xs font-bold">
+                          🤖 24/7 자동화
+                        </span>
+                      )}
+                      {post.post_type === 'keyword' && (
+                        <span className="badge badge-secondary badge-xs font-bold">
+                          🔑 자동 키워드
+                        </span>
+                      )}
+                      {(post.post_type === 'manual' || !post.post_type) && (
+                        <span className="badge badge-ghost badge-xs font-bold border border-base-300 text-base-content/75">
+                          ✍️ 수기/AI초안
+                        </span>
+                      )}
                     </div>
                     <h4 className="font-extrabold text-sm text-base-content truncate pr-1">
                       {post.title}
@@ -158,11 +173,13 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                       ) : (
                         <div className="flex items-center gap-1.5">
                           {post.scheduled_at ? (
-                            <span className="text-warning">
+                            <span className="text-warning font-bold text-xs bg-warning/10 px-2 py-0.5 rounded-md">
                               📅 {parseUtcDate(post.scheduled_at).toLocaleString('ko-KR')}
                             </span>
                           ) : (
-                            <span className="text-info">⏳ 스케줄러 기동 시 발행</span>
+                            <span className="text-info font-bold text-xs bg-info/10 px-2 py-0.5 rounded-md">
+                              ⏳ 즉시 (스케줄러 기동 시)
+                            </span>
                           )}
                           <button
                             onClick={() => {

@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 // Auth
 import Login from './components/Login.jsx';
-import AccountsTab from './components/tabs/AccountsTab';
-
-// Tabs
-import DashboardTab from './components/tabs/DashboardTab';
-import GenerateTab from './components/tabs/GenerateTab';
-import LogsTab from './components/tabs/LogsTab';
-import QueueTab from './components/tabs/QueueTab';
-import SettingsTab from './components/tabs/SettingsTab';
 import { apiFetch } from './utils/api';
 import { supabase } from './utils/supabase.js';
+
+// Lazy loaded Tabs
+const AccountsTab = lazy(() => import('./components/tabs/AccountsTab'));
+const DashboardTab = lazy(() => import('./components/tabs/DashboardTab'));
+const GenerateTab = lazy(() => import('./components/tabs/GenerateTab'));
+const LogsTab = lazy(() => import('./components/tabs/LogsTab'));
+const QueueTab = lazy(() => import('./components/tabs/QueueTab'));
+const SettingsTab = lazy(() => import('./components/tabs/SettingsTab'));
 
 const WEB_APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'unknown';
 
@@ -209,7 +209,7 @@ const App = () => {
     await supabase.auth.signOut();
   };
 
-  const handleManualUpdateCheck = async () => {
+  const handleManualUpdateCheck = useCallback(async () => {
     const api = window.electronAPI;
     const versionsMatch = latestVersion && appVersion && latestVersion === appVersion;
 
@@ -229,10 +229,23 @@ const App = () => {
       setIsCheckingUpdate(false);
       setManualUpdateRequested(false);
     }
-  };
+  }, [latestVersion, appVersion]);
+
+  const handleClearReusedPost = useCallback(() => {
+    setReusedPost(null);
+  }, []);
+
+  const handleReusePost = useCallback((post) => {
+    setReusedPost(post);
+    setActiveTab('generate');
+  }, []);
+
+  const handleLoginSuccess = useCallback(() => {
+    setIsAuthenticated(true);
+  }, []);
 
   if (!isAuthenticated) {
-    return <Login onLogin={() => setIsAuthenticated(true)} />;
+    return <Login onLogin={handleLoginSuccess} />;
   }
 
   return (
@@ -296,52 +309,58 @@ const App = () => {
       {/* ── Content (Rule: rendering-conditional-render) */}
       <main className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex-1">
         <div className="animate-in fade-in duration-300">
-          <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
-            <DashboardTab
-              accounts={accounts}
-              posts={posts}
-              scheduledPosts={scheduledPosts}
-              taskStatus={taskStatus}
-              realtimeLogs={realtimeLogs}
-              fetchAll={fetchAll}
-            />
-          </div>
-          <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
-            <SettingsTab
-              settings={settings}
-              fetchAll={fetchAll}
-              appVersion={appVersion}
-              latestVersion={latestVersion}
-              onManualUpdateCheck={handleManualUpdateCheck}
-              isCheckingUpdate={isCheckingUpdate}
-            />
-          </div>
-          <div style={{ display: activeTab === 'accounts' ? 'block' : 'none' }}>
-            <AccountsTab accounts={accounts} fetchAll={fetchAll} />
-          </div>
-          <div style={{ display: activeTab === 'generate' ? 'block' : 'none' }}>
-            <GenerateTab
-              accounts={accounts}
-              campaigns={campaigns}
-              fetchAll={fetchAll}
-              reusedPost={reusedPost}
-              clearReusedPost={() => setReusedPost(null)}
-            />
-          </div>
-          <div style={{ display: activeTab === 'queue' ? 'block' : 'none' }}>
-            <QueueTab
-              scheduledPosts={scheduledPosts}
-              posts={posts}
-              fetchAll={fetchAll}
-              onReusePost={(post) => {
-                setReusedPost(post);
-                setActiveTab('generate');
-              }}
-            />
-          </div>
-          <div style={{ display: activeTab === 'logs' ? 'block' : 'none' }}>
-            <LogsTab realtimeLogs={realtimeLogs} setRealtimeLogs={setRealtimeLogs} />
-          </div>
+          <Suspense
+            fallback={
+              <div className="flex flex-col items-center justify-center p-20 gap-4">
+                <span className="loading loading-spinner loading-lg text-primary"></span>
+                <span className="text-sm font-semibold text-base-content/60">탭 로딩 중...</span>
+              </div>
+            }
+          >
+            <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
+              <DashboardTab
+                accounts={accounts}
+                posts={posts}
+                scheduledPosts={scheduledPosts}
+                taskStatus={taskStatus}
+                realtimeLogs={realtimeLogs}
+                fetchAll={fetchAll}
+              />
+            </div>
+            <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
+              <SettingsTab
+                settings={settings}
+                fetchAll={fetchAll}
+                appVersion={appVersion}
+                latestVersion={latestVersion}
+                onManualUpdateCheck={handleManualUpdateCheck}
+                isCheckingUpdate={isCheckingUpdate}
+              />
+            </div>
+            <div style={{ display: activeTab === 'accounts' ? 'block' : 'none' }}>
+              <AccountsTab accounts={accounts} fetchAll={fetchAll} />
+            </div>
+            <div style={{ display: activeTab === 'generate' ? 'block' : 'none' }}>
+              <GenerateTab
+                accounts={accounts}
+                campaigns={campaigns}
+                fetchAll={fetchAll}
+                reusedPost={reusedPost}
+                clearReusedPost={handleClearReusedPost}
+              />
+            </div>
+            <div style={{ display: activeTab === 'queue' ? 'block' : 'none' }}>
+              <QueueTab
+                scheduledPosts={scheduledPosts}
+                posts={posts}
+                fetchAll={fetchAll}
+                onReusePost={handleReusePost}
+              />
+            </div>
+            <div style={{ display: activeTab === 'logs' ? 'block' : 'none' }}>
+              <LogsTab realtimeLogs={realtimeLogs} setRealtimeLogs={setRealtimeLogs} />
+            </div>
+          </Suspense>
         </div>
       </main>
     </div>
