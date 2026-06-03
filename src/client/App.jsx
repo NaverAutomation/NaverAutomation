@@ -54,7 +54,6 @@ const App = () => {
   });
   const [realtimeLogs, setRealtimeLogs] = useState([]);
   const [accounts, setAccounts] = useState([]);
-  const [campaigns, setCampaigns] = useState([]);
   const [posts, setPosts] = useState([]);
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [settings, setSettings] = useState({ openai_api_key: '', gemini_api_key: '' });
@@ -87,16 +86,14 @@ const App = () => {
   const fetchAll = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
-      const [acc, camp, ps, sched, sets, taskSt] = await Promise.all([
+      const [acc, ps, sched, sets, taskSt] = await Promise.all([
         apiFetch('/api/accounts'),
-        apiFetch('/api/campaigns'),
         apiFetch('/api/posts'),
         apiFetch('/api/posts/scheduled'),
         apiFetch('/api/settings'),
         apiFetch('/api/task/status'),
       ]);
       setAccounts(acc);
-      setCampaigns(camp);
       setPosts(ps);
       setScheduledPosts(sched);
       setSettings((prev) => ({ ...prev, ...sets }));
@@ -343,7 +340,7 @@ const App = () => {
             <div style={{ display: activeTab === 'generate' ? 'block' : 'none' }}>
               <GenerateTab
                 accounts={accounts}
-                campaigns={campaigns}
+                scheduledPosts={scheduledPosts}
                 fetchAll={fetchAll}
                 reusedPost={reusedPost}
                 clearReusedPost={handleClearReusedPost}

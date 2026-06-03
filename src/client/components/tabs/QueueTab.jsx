@@ -2,18 +2,28 @@ import React, { useState } from 'react';
 import { apiFetch, parseUtcDate } from '../../utils/api';
 import { Card, SectionTitle, StatusBadge } from '../common';
 
-// ── UTC 시간을 로컬 datetime-local 포맷(YYYY-MM-DDTHH:MM)으로 변환 (Hoisted outside component) ──
+// ── UTC 시간을 로컬 datetime-local 포맷(YYYY-MM-DDTHH:MM)으로 변환 ──
 const toLocalDateTimeString = (utcString) => {
   if (!utcString) return '';
-  const date = new Date(utcString);
+  const date = parseUtcDate(utcString);
   if (Number.isNaN(date.getTime())) return '';
-  const offset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+
+  const pad = (num) => String(num).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  const MM = pad(date.getMonth() + 1);
+  const dd = pad(date.getDate());
+  const hh = pad(date.getHours());
+  const mm = pad(date.getMinutes());
+
+  return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
 };
 
 const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReusePost }) => {
   // ── 예약 수정 상태 ──
   const [editingPostId, setEditingPostId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const [editingContent, setEditingContent] = useState('');
+  const [editingKeyword, setEditingKeyword] = useState('');
   const [editingTimeValue, setEditingTimeValue] = useState('');
   const [expandedPostIds, setExpandedPostIds] = useState({});
 
@@ -40,18 +50,22 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
     }
   };
 
-  // ── 예약 발행 시간 수정 적용 ──
-  const handleUpdateScheduleTime = async (id) => {
+  // ── 예약 글 상세 정보 수정 적용 ──
+  const handleUpdatePost = async (id) => {
     if (!editingTimeValue) return alert('예약 시간을 입력하세요.');
     try {
       const utcTime = new Date(editingTimeValue).toISOString();
-      const res = await apiFetch(`/api/posts/scheduled/${id}/time`, {
+      const res = await apiFetch(`/api/posts/scheduled/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ scheduled_at: utcTime }),
+        body: JSON.stringify({
+          title: editingTitle,
+          content: editingContent,
+          keyword: editingKeyword,
+          scheduled_at: utcTime,
+        }),
       });
-      alert(res.message || '예약 시간이 성공적으로 변경되었습니다!');
+      alert(res.message || '예약 정보가 성공적으로 변경되었습니다!');
       setEditingPostId(null);
-      setEditingTimeValue('');
       await fetchAll();
     } catch (err) {
       alert(`수정 실패: ${err.message}`);
@@ -97,6 +111,16 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
     }
   };
 
+  const startEditing = (post) => {
+    setEditingPostId(post.id);
+    setEditingTitle(post.title || '');
+    setEditingContent(post.content || '');
+    setEditingKeyword(post.keyword || '');
+    setEditingTimeValue(
+      toLocalDateTimeString(post.scheduled_at) || toLocalDateTimeString(new Date()),
+    );
+  };
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       {/* ── 발행 대기열 현황 ── */}
@@ -119,18 +143,13 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                 key={post.id}
                 className="p-3.5 bg-base-100 border border-base-300 rounded-xl shadow-sm flex flex-col gap-2.5"
               >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
                       <StatusBadge status={post.status} />
                       <span className="badge badge-neutral badge-xs font-mono font-bold opacity-60">
                         {post.naver_id ? `@${post.naver_id}` : '🔄 자동'}
                       </span>
-                      {post.post_type === 'automation' && (
-                        <span className="badge badge-primary badge-xs font-bold">
-                          🤖 24/7 자동화
-                        </span>
-                      )}
                       {post.post_type === 'keyword' && (
                         <span className="badge badge-secondary badge-xs font-bold">
                           🔑 자동 키워드
@@ -141,37 +160,82 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                           ✍️ 수기/AI초안
                         </span>
                       )}
+                      {post.keyword && (
+                        <span className="badge badge-accent badge-xs font-bold text-accent-content">
+                          #{post.keyword}
+                        </span>
+                      )}
                     </div>
-                    <h4 className="font-extrabold text-sm text-base-content truncate pr-1">
-                      {post.title}
-                    </h4>
-                    <div className="text-[11px] text-base-content/40 mt-1.5 font-semibold">
-                      {editingPostId === post.id ? (
-                        <div className="flex items-center gap-2 mt-1">
+
+                    {editingPostId === post.id ? (
+                      <div className="space-y-3 p-3 bg-base-200/50 rounded-lg border border-base-300 animate-in fade-in duration-200">
+                        <div>
+                          <label className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                            제목
+                          </label>
+                          <input
+                            type="text"
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            className="input input-bordered input-sm w-full bg-base-100 font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                            키워드
+                          </label>
+                          <input
+                            type="text"
+                            value={editingKeyword}
+                            onChange={(e) => setEditingKeyword(e.target.value)}
+                            className="input input-bordered input-sm w-full bg-base-100 font-semibold"
+                            placeholder="예약 키워드"
+                          />
+                        </div>
+                        <div>
+                          <label className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                            본문 내용
+                          </label>
+                          <textarea
+                            value={editingContent}
+                            onChange={(e) => setEditingContent(e.target.value)}
+                            className="textarea textarea-bordered textarea-sm w-full h-32 bg-base-100 font-medium leading-relaxed"
+                          />
+                        </div>
+                        <div>
+                          <label className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                            예약 시간
+                          </label>
                           <input
                             type="datetime-local"
                             value={editingTimeValue}
                             onChange={(e) => setEditingTimeValue(e.target.value)}
-                            className="input input-bordered input-xs bg-base-100 font-medium w-44"
+                            className="input input-bordered input-sm bg-base-100 font-medium w-full text-xs"
                           />
+                        </div>
+                        <div className="flex gap-2 justify-end">
                           <button
-                            onClick={() => handleUpdateScheduleTime(post.id)}
-                            className="btn btn-xs btn-primary font-bold cursor-pointer"
+                            onClick={() => handleUpdatePost(post.id)}
+                            className="btn btn-xs btn-primary font-black cursor-pointer"
                           >
                             저장
                           </button>
                           <button
                             onClick={() => {
                               setEditingPostId(null);
-                              setEditingTimeValue('');
                             }}
                             className="btn btn-xs btn-ghost border-base-300 font-bold cursor-pointer"
                           >
                             취소
                           </button>
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
+                      </div>
+                    ) : (
+                      <>
+                        <h4 className="font-extrabold text-sm text-base-content truncate pr-1">
+                          {post.title}
+                        </h4>
+                        <div className="text-[11px] text-base-content/40 mt-2 font-semibold flex items-center gap-2">
                           {post.scheduled_at ? (
                             <span className="text-warning font-bold text-xs bg-warning/10 px-2 py-0.5 rounded-md">
                               📅 {parseUtcDate(post.scheduled_at).toLocaleString('ko-KR')}
@@ -182,15 +246,9 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                             </span>
                           )}
                           <button
-                            onClick={() => {
-                              setEditingPostId(post.id);
-                              setEditingTimeValue(
-                                toLocalDateTimeString(post.scheduled_at) ||
-                                  toLocalDateTimeString(new Date()),
-                              );
-                            }}
+                            onClick={() => startEditing(post)}
                             className="btn btn-xs btn-ghost btn-circle text-[10px] w-5 h-5 min-h-0 cursor-pointer border border-base-300 hover:bg-base-300"
-                            title="예약 시간 수정"
+                            title="상세 수정"
                           >
                             ✏️
                           </button>
@@ -207,27 +265,29 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                             {expandedPostIds[post.id] ? '🔼' : '🔍'}
                           </button>
                         </div>
-                      )}
+                      </>
+                    )}
+                  </div>
+                  {editingPostId !== post.id && (
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <button
+                        onClick={() => handlePublishNow(post.id)}
+                        className="btn btn-xs btn-success btn-outline font-bold cursor-pointer"
+                        title="즉시 강제발행"
+                      >
+                        🚀 발행
+                      </button>
+                      <button
+                        onClick={() => handleCancelSchedule(post.id)}
+                        className="btn btn-xs btn-error btn-outline font-bold cursor-pointer"
+                        title="취소"
+                      >
+                        ✕
+                      </button>
                     </div>
-                  </div>
-                  <div className="flex flex-col gap-1 shrink-0">
-                    <button
-                      onClick={() => handlePublishNow(post.id)}
-                      className="btn btn-xs btn-success btn-outline font-bold cursor-pointer"
-                      title="즉시 강제발행"
-                    >
-                      🚀 발행
-                    </button>
-                    <button
-                      onClick={() => handleCancelSchedule(post.id)}
-                      className="btn btn-xs btn-error btn-outline font-bold cursor-pointer"
-                      title="취소"
-                    >
-                      ✕
-                    </button>
-                  </div>
+                  )}
                 </div>
-                {expandedPostIds[post.id] && post.content && (
+                {editingPostId !== post.id && expandedPostIds[post.id] && post.content && (
                   <div className="text-xs text-base-content/75 bg-base-200/50 p-2.5 rounded-lg max-h-40 overflow-y-auto leading-relaxed font-medium whitespace-pre-wrap border border-base-300/40 animate-in slide-in-from-top-1 duration-150">
                     {post.content}
                   </div>

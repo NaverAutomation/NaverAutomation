@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { apiFetch, parseUtcDate } from '../../utils/api';
 import { Btn, Card, Modal, SectionTitle, StatusBadge } from '../common';
 
@@ -7,6 +7,15 @@ const DashboardTab = React.memo(
     const [selectedPost, setSelectedPost] = useState(null);
     const [retrying, setRetrying] = useState(false);
     const [selectedIds, setSelectedIds] = useState([]);
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    // ── 실시간 countdown 업데이트 타이머 ──
+    useEffect(() => {
+      const timer = setInterval(() => {
+        setCurrentTime(new Date());
+      }, 30000); // 30초마다 갱신
+      return () => clearInterval(timer);
+    }, []);
 
     const handleDeleteAll = async () => {
       if (
@@ -92,6 +101,29 @@ const DashboardTab = React.memo(
       { label: '예약/대기', value: scheduledPosts.length, sub: '발행 예정', color: 'text-warning' },
     ];
 
+    // ── 다음 발행 대기 중인 예약글 ──
+    const nextPost = useMemo(() => {
+      if (!scheduledPosts || scheduledPosts.length === 0) return null;
+      const sorted = [...scheduledPosts]
+        .filter((p) => p.status === 'scheduled' || p.status === 'pending')
+        .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+      return sorted[0] || null;
+    }, [scheduledPosts]);
+
+    // ── 다음 발행까지의 카운트다운 텍스트 계산 ──
+    const countdownText = useMemo(() => {
+      if (!nextPost?.scheduled_at) return '';
+      const diffMs = new Date(nextPost.scheduled_at).getTime() - currentTime.getTime();
+      if (diffMs <= 0) return '곧 발행 예정...';
+      const diffMins = Math.ceil(diffMs / 60000);
+      if (diffMins > 60) {
+        const hours = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        return `${hours}시간 ${mins}분 후 발행`;
+      }
+      return `${diffMins}분 후 발행`;
+    }, [nextPost, currentTime]);
+
     return (
       <div className="flex flex-col gap-6">
         {/* 통계 카드 */}
@@ -112,9 +144,9 @@ const DashboardTab = React.memo(
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
           {/* 스케줄러 상태 */}
-          <Card className="h-full flex flex-col">
+          <Card className="h-full flex flex-col justify-between">
             <SectionTitle>⚡ 24/7 자동화 엔진 상태</SectionTitle>
-            <div className="flex-1 flex flex-col justify-center gap-4 py-4">
+            <div className="flex-1 flex flex-col justify-center gap-4 py-2">
               <div className="flex items-center gap-3">
                 <span
                   className={`w-4 h-4 rounded-full ${taskStatus.isRunning ? 'bg-success shadow-[0_0_12px_#22c55e] animate-pulse' : 'bg-error'}`}
@@ -137,6 +169,25 @@ const DashboardTab = React.memo(
                   <strong className="text-warning text-2xl">{scheduledPosts.length}개</strong>
                 </div>
               </div>
+
+              {nextPost && (
+                <div className="mt-2 text-xs font-semibold text-base-content/80 flex flex-col bg-warning/10 p-3.5 rounded-xl border border-warning/20 animate-in fade-in duration-200">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-warning-content font-black">
+                      📅 다음 발행 예정 포스트
+                    </span>
+                    <span className="badge badge-warning badge-sm font-bold animate-pulse">
+                      {countdownText}
+                    </span>
+                  </div>
+                  <div className="text-sm font-bold truncate text-base-content/95">
+                    {nextPost.title}
+                  </div>
+                  <div className="text-[10px] text-base-content/40 mt-1">
+                    설정 시간: {parseUtcDate(nextPost.scheduled_at).toLocaleString('ko-KR')}
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -336,5 +387,7 @@ const DashboardTab = React.memo(
     );
   },
 );
+
+DashboardTab.displayName = 'DashboardTab';
 
 export default DashboardTab;
