@@ -54,9 +54,10 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
           <div className="flex flex-col pb-4">
             {allLogs.map((log, i) => {
               const style = levelStyles[log.level] || levelStyles.info;
-              const timeStr = parseUtcDate(log.created_at).toLocaleTimeString('en-GB', {
-                hour12: false,
-              });
+              const timeStr =
+                parseUtcDate(log.created_at)?.toLocaleTimeString('en-GB', {
+                  hour12: false,
+                }) || '';
 
               return (
                 <div

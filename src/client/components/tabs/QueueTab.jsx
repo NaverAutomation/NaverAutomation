@@ -248,7 +248,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                         <div className="text-[11px] text-base-content/40 mt-2 font-semibold flex items-center gap-2">
                           {post.scheduled_at ? (
                             <span className="text-warning font-bold text-xs bg-warning/10 px-2 py-0.5 rounded-md">
-                              📅 {parseUtcDate(post.scheduled_at).toLocaleString('ko-KR')}
+                              📅 {parseUtcDate(post.scheduled_at)?.toLocaleString('ko-KR') || '-'}
                             </span>
                           ) : (
                             <span className="text-info font-bold text-xs bg-info/10 px-2 py-0.5 rounded-md">
@@ -372,7 +372,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                   </div>
                 </div>
                 <div className="text-[10px] text-base-content/40 font-semibold">
-                  <span>{parseUtcDate(post.created_at).toLocaleString('ko-KR')}</span>
+                  <span>{parseUtcDate(post.created_at)?.toLocaleString('ko-KR') || '-'}</span>
                 </div>
               </div>
             ))}

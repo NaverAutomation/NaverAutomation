@@ -184,7 +184,7 @@ const DashboardTab = React.memo(
                     {nextPost.title}
                   </div>
                   <div className="text-[10px] text-base-content/40 mt-1">
-                    설정 시간: {parseUtcDate(nextPost.scheduled_at).toLocaleString('ko-KR')}
+                    설정 시간: {parseUtcDate(nextPost.scheduled_at)?.toLocaleString('ko-KR') || '-'}
                   </div>
                 </div>
               )}
@@ -204,7 +204,7 @@ const DashboardTab = React.memo(
                     className={`text-xs font-mono p-2 rounded bg-base-100/50 border border-base-300 ${log.level === 'error' ? 'text-error' : log.level === 'success' ? 'text-success' : 'text-base-content/70'}`}
                   >
                     <span className="mr-3 text-base-content/40">
-                      {parseUtcDate(log.created_at).toLocaleTimeString()}
+                      {parseUtcDate(log.created_at)?.toLocaleTimeString() || '-'}
                     </span>
                     {log.message}
                   </div>
@@ -281,7 +281,9 @@ const DashboardTab = React.memo(
                         <StatusBadge status={p.status} />
                       </td>
                       <td className="text-base-content/50 font-medium text-xs">
-                        {p.created_at ? parseUtcDate(p.created_at).toLocaleString('ko-KR') : '-'}
+                        {p.created_at
+                          ? parseUtcDate(p.created_at)?.toLocaleString('ko-KR') || '-'
+                          : '-'}
                       </td>
                       <td>
                         <div className="flex justify-center gap-2">
