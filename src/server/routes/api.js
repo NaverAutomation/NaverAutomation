@@ -10,8 +10,6 @@ import {
   emitLog,
   getAvailableAccount,
   getSchedulerStatus,
-  performTask,
-  processAutomation,
   processScheduledPosts,
   startScheduler,
   stopScheduler,
@@ -298,121 +296,6 @@ router.post('/generate/edit', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// CAMPAIGNS (24/7 무한 루프)
-// ─────────────────────────────────────────────
-
-// GET /campaigns
-router.get('/campaigns', (req, res) => {
-  db.all(
-    'SELECT * FROM campaigns WHERE user_id = ? ORDER BY id DESC',
-    [req.user.id],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json(rows);
-    },
-  );
-});
-
-// POST /campaigns
-router.post('/campaigns', (req, res) => {
-  const { title, content, image_url } = req.body;
-  if (!title || !content) return res.status(400).json({ error: '제목과 본문은 필수입니다.' });
-
-  db.run(
-    'INSERT INTO campaigns (user_id, title, content, image_url) VALUES (?, ?, ?, ?)',
-    [req.user.id, title, content, image_url || null],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      const campaignId = this.lastID;
-
-      emitLog(
-        'info',
-        `[24/7 자동화] 새 대상포스트 등록 완료: "${title}" (ID: ${campaignId})`,
-        req.user.id,
-      );
-
-      if (!getSchedulerStatus().isRunning) {
-        startScheduler();
-        emitLog('info', '[24/7 자동화] 스케줄러가 기동되었습니다.', req.user.id);
-      }
-
-      // 등록 즉시 첫 글 1회 백그라운드 발행 시작
-      emitLog(
-        'info',
-        `[24/7 자동화] "${title}" 첫 포스팅을 즉시 백그라운드에서 시작합니다.`,
-        req.user.id,
-      );
-      db.get('SELECT * FROM campaigns WHERE id = ?', [campaignId], (err, row) => {
-        if (!err && row) {
-          performTask(row);
-        }
-      });
-
-      res.json({ id: campaignId, success: true });
-    },
-  );
-});
-
-// PATCH /campaigns/:id/status
-router.patch('/campaigns/:id/status', (req, res) => {
-  const { status } = req.body;
-  if (!['active', 'paused'].includes(status)) {
-    return res.status(400).json({ error: 'status는 active 또는 paused여야 합니다.' });
-  }
-  db.run(
-    'UPDATE campaigns SET status = ? WHERE id = ? AND user_id = ?',
-    [status, req.params.id, req.user.id],
-    (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-
-      // 활성화 시 즉시 스케줄러 기동 및 자동화 루프 예약 생성 트리거
-      if (status === 'active') {
-        if (!getSchedulerStatus().isRunning) {
-          startScheduler();
-        } else {
-          processAutomation();
-        }
-      }
-
-      res.json({ success: true, status });
-    },
-  );
-});
-
-// POST /campaigns/:id/publish-now (캠페인 즉시 1회 테스트 발행)
-router.post('/campaigns/:id/publish-now', (req, res) => {
-  const { id } = req.params;
-  db.get('SELECT * FROM campaigns WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: '캠페인을 찾을 수 없습니다.' });
-
-    if (!getSchedulerStatus().isRunning) {
-      startScheduler();
-    }
-
-    // 백그라운드에서 즉시 1회 실행
-    performTask(row);
-
-    res.json({
-      success: true,
-      message: '캠페인 포스팅을 즉시 백그라운드에서 시작했습니다. 로그 탭을 확인해 주세요.',
-    });
-  });
-});
-
-// DELETE /campaigns/:id
-router.delete('/campaigns/:id', (req, res) => {
-  db.run(
-    'DELETE FROM campaigns WHERE id = ? AND user_id = ?',
-    [req.params.id, req.user.id],
-    (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ success: true });
-    },
-  );
-});
-
-// ─────────────────────────────────────────────
 // POSTS
 // ─────────────────────────────────────────────
 
@@ -516,10 +399,10 @@ router.post('/posts/schedule', (req, res) => {
   } = req.body;
   if (!title || !content) return res.status(400).json({ error: '제목과 내용은 필수입니다.' });
 
-  // 5분 ~ 10분 사이의 랜덤한 오차(300,000ms ~ 600,000ms) 추가 적용
+  // 1분 ~ 2분 사이의 랜덤한 오차(60,000ms ~ 120,000ms) 추가 적용
   let finalScheduledAt = scheduled_at;
   if (scheduled_at) {
-    const randomOffsetMs = 300000 + Math.random() * 300000;
+    const randomOffsetMs = 60000 + Math.random() * 60000;
     finalScheduledAt = new Date(new Date(scheduled_at).getTime() + randomOffsetMs).toISOString();
   }
 
@@ -554,11 +437,13 @@ router.post('/posts/schedule-keywords', async (req, res) => {
   const {
     keywords,
     start_time,
-    interval_hours,
+    interval_hours = 0,
+    interval_minutes = 0,
     account_id,
     use_round_robin,
     headless,
     engine = 'gemini',
+    image_url, // Storing JSON string containing representative and content images
   } = req.body;
 
   if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
@@ -601,14 +486,14 @@ router.post('/posts/schedule-keywords', async (req, res) => {
       try {
         const content = await generateContent(engine, aiConfig, keyword);
 
-        // 5분 ~ 10분 사이의 랜덤 오차 추가
-        const randomOffsetMs = 300000 + Math.random() * 300000;
+        // 1분 ~ 2분 사이의 랜덤 오차 추가
+        const randomOffsetMs = 60000 + Math.random() * 60000;
         const scheduledTimeWithOffset = new Date(currentScheduledTime.getTime() + randomOffsetMs);
         const finalScheduledAt = scheduledTimeWithOffset.toISOString();
 
         await new Promise((resolve, reject) => {
           const sql =
-            'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+            'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
           db.run(
             sql,
             [
@@ -616,11 +501,12 @@ router.post('/posts/schedule-keywords', async (req, res) => {
               use_round_robin ? null : account_id || null,
               content.title,
               content.content,
-              null,
+              image_url || null,
               headless ? 1 : 0,
               finalScheduledAt,
               'scheduled',
               'keyword',
+              keyword,
             ],
             function (err) {
               if (err) reject(err);
@@ -639,10 +525,9 @@ router.post('/posts/schedule-keywords', async (req, res) => {
         results.push({ keyword, success: false, error: err.message });
       }
 
-      // 다음 예약 시각 계산 (interval_hours 가 적용됨)
-      currentScheduledTime = new Date(
-        currentScheduledTime.getTime() + interval_hours * 60 * 60 * 1000,
-      );
+      // 다음 예약 시각 계산 (interval_hours와 interval_minutes 가 적용됨)
+      const intervalMs = (Number(interval_hours) * 60 + Number(interval_minutes)) * 60 * 1000;
+      currentScheduledTime = new Date(currentScheduledTime.getTime() + intervalMs);
     }
 
     if (!getSchedulerStatus().isRunning) {
@@ -668,22 +553,22 @@ router.delete('/posts/scheduled/:id', (req, res) => {
   );
 });
 
-// PATCH /posts/scheduled/:id/time (예약 발행 시간 수정)
-router.patch('/posts/scheduled/:id/time', (req, res) => {
-  const { scheduled_at } = req.body;
-  if (!scheduled_at) {
-    return res.status(400).json({ error: '변경할 예약 시간이 필요합니다.' });
+// PATCH /posts/scheduled/:id (예약 발행글 수정 - 제목, 본문, 키워드, 예약 시간)
+router.patch('/posts/scheduled/:id', (req, res) => {
+  const { title, content, keyword, scheduled_at } = req.body;
+  if (!title || !content) {
+    return res.status(400).json({ error: '제목과 본문은 필수입니다.' });
   }
 
   db.run(
-    "UPDATE posts SET scheduled_at = ?, status = 'scheduled' WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending')",
-    [scheduled_at, req.params.id, req.user.id],
+    "UPDATE posts SET title = ?, content = ?, keyword = ?, scheduled_at = ?, status = 'scheduled' WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing')",
+    [title, content, keyword || null, scheduled_at || null, req.params.id, req.user.id],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
       if (this.changes === 0) {
         return res.status(404).json({ error: '수정 가능한 예약 포스트를 찾을 수 없습니다.' });
       }
-      res.json({ success: true, message: '예약 시간이 수정되었습니다.' });
+      res.json({ success: true, message: '예약 포스트가 수정되었습니다.' });
     },
   );
 });

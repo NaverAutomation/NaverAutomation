@@ -198,12 +198,90 @@ async function fillEditorTitle(page, title) {
 /**
  * [Helper] 이미지 업로드
  */
-async function uploadImageToEditor(page, imageUrl) {
+/**
+ * [Helper] Playwright Chromium Canvas API를 이용해 이미지를 변조합니다 (유사 이미지 피하기).
+ */
+async function mutateImageViaCanvas(page, imagePath) {
+  try {
+    const base64 = fs.readFileSync(imagePath, { encoding: 'base64' });
+    const ext = path.extname(imagePath).toLowerCase();
+    const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
+    const dataUrl = `data:${mimeType};base64,${base64}`;
+
+    console.log('Mutating image via browser Canvas to avoid duplicate image detection...');
+    const mutatedDataUrl = await page.evaluate(async (srcDataUrl) => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // 1. Margins crop (4px)
+            const cropPx = 4;
+            canvas.width = Math.max(10, img.width - cropPx * 2);
+            canvas.height = Math.max(10, img.height - cropPx * 2);
+
+            // 2. Rotate slightly (-0.5 to 0.5 deg)
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            const angle = (Math.random() * 1.0 - 0.5) * (Math.PI / 180);
+            ctx.rotate(angle);
+
+            ctx.drawImage(
+              img,
+              cropPx,
+              cropPx,
+              img.width - cropPx * 2,
+              img.height - cropPx * 2,
+              -canvas.width / 2,
+              -canvas.height / 2,
+              canvas.width,
+              canvas.height,
+            );
+
+            // 3. Pixel noise injection
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imgData.data;
+            for (let i = 0; i < data.length; i += 4) {
+              const noise = Math.floor(Math.random() * 3) - 1; // -1, 0, or 1
+              data[i] = Math.min(255, Math.max(0, data[i] + noise));
+              data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
+              data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
+            }
+            ctx.putImageData(imgData, 0, 0);
+
+            // Export as JPEG to strip EXIF and change structure
+            resolve(canvas.toDataURL('image/jpeg', 0.92));
+          } catch (e) {
+            reject(new Error(e.message));
+          }
+        };
+        img.onerror = () => reject(new Error('Image failed to load in canvas'));
+        img.src = srcDataUrl;
+      });
+    }, dataUrl);
+
+    const cleanBase64 = mutatedDataUrl.replace(/^data:image\/\w+;base64,/, '');
+    const mutatedBuffer = Buffer.from(cleanBase64, 'base64');
+    const mutatedPath = path.join(os.tmpdir(), `mutated_image_${Date.now()}.jpg`);
+    fs.writeFileSync(mutatedPath, mutatedBuffer);
+    return mutatedPath;
+  } catch (err) {
+    console.error('Image mutation failed, falling back to original:', err.message);
+    return imagePath;
+  }
+}
+
+/**
+ * [Helper] 이미지 업로드
+ */
+async function uploadImageToEditor(page, imageUrl, shouldMutate = false) {
   if (!imageUrl) return;
 
-  console.log('Uploading image to Naver Blog...');
+  console.log(`Uploading image to Naver Blog (shouldMutate: ${shouldMutate})...`);
   let imagePath = null;
   let isTemp = false;
+  let mutatedPath = null;
 
   try {
     if (imageUrl.startsWith('http')) {
@@ -218,7 +296,12 @@ async function uploadImageToEditor(page, imageUrl) {
       return;
     }
 
-    // 상단 툴바의 사진 버튼과 본문 인서트 메뉴의 사진 버튼이 중복 검색되어 strict mode violation 에러가 발생하는 것을 방지하기 위해 .first()를 사용합니다.
+    let uploadPath = imagePath;
+    if (shouldMutate) {
+      mutatedPath = await mutateImageViaCanvas(page, imagePath);
+      uploadPath = mutatedPath;
+    }
+
     const imageBtn = page.locator('button[data-name="image"]').first();
     await imageBtn.waitFor({ state: 'visible', timeout: 5000 });
 
@@ -227,10 +310,9 @@ async function uploadImageToEditor(page, imageUrl) {
       imageBtn.click({ force: true }),
     ]);
 
-    await fileChooser.setFiles(imagePath);
+    await fileChooser.setFiles(uploadPath);
     console.log('Image file set via filechooser. Waiting for upload to complete...');
 
-    // 네이버 에디터 내 업로드 완료 대기 (명시적인 슬립 대신 넉넉하게 기다림)
     await page.waitForTimeout(4000);
     console.log('Image upload completed.');
   } catch (err) {
@@ -238,6 +320,9 @@ async function uploadImageToEditor(page, imageUrl) {
   } finally {
     if (isTemp && imagePath && fs.existsSync(imagePath)) {
       fs.unlinkSync(imagePath);
+    }
+    if (mutatedPath && fs.existsSync(mutatedPath)) {
+      fs.unlinkSync(mutatedPath);
     }
   }
 }
@@ -545,15 +630,44 @@ export async function postToNaver(account, post, options = {}) {
     if (onProgress) onProgress('info', '제목 작성 중...');
     await fillEditorTitle(page, post.title);
 
-    // 5. 이미지 업로드
+    // Parse image_url for multiple images JSON support
+    let representativeImages = [];
+    let contentImages = [];
     if (post.image_url) {
-      if (onProgress) onProgress('info', '이미지 업로드 중...');
-      await uploadImageToEditor(page, post.image_url);
+      try {
+        const parsed = JSON.parse(post.image_url);
+        if (parsed && typeof parsed === 'object') {
+          representativeImages = parsed.representative || [];
+          contentImages = parsed.content || [];
+        } else {
+          representativeImages = [post.image_url];
+        }
+      } catch {
+        representativeImages = [post.image_url];
+      }
+    }
+
+    // 5. 대표 이미지 업로드 (원본 그대로)
+    if (representativeImages.length > 0) {
+      if (onProgress)
+        onProgress('info', `대표 사진 업로드 중 (${representativeImages.length}개)...`);
+      for (const imgUrl of representativeImages) {
+        await uploadImageToEditor(page, imgUrl, false);
+      }
     }
 
     // 6. 본문 입력
     if (onProgress) onProgress('info', '본문 내용 작성 중...');
     await fillEditorContent(page, post.content);
+
+    // 7. 본문 하단 이미지 업로드 (AI 자동 변형)
+    if (contentImages.length > 0) {
+      if (onProgress)
+        onProgress('info', `본문 사진 업로드 중 (${contentImages.length}개, AI 자동 변조)...`);
+      for (const imgUrl of contentImages) {
+        await uploadImageToEditor(page, imgUrl, true);
+      }
+    }
 
     // 7. 의도치 않은 서식 제거
     await removeStrikethrough(page);
