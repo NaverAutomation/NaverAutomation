@@ -30,7 +30,12 @@ async function run() {
   console.log('Gemini API key retrieved. Testing image generation...');
   const keyword = '아늑하고 트렌디한 성수동 카페 인테리어';
 
-  const base64Image = await generateImageWithGemini(apiKey, keyword, '테스트 타이틀', '테스트 본문');
+  const base64Image = await generateImageWithGemini(
+    apiKey,
+    keyword,
+    '테스트 타이틀',
+    '테스트 본문',
+  );
 
   if (base64Image) {
     const outputPath = path.resolve('./test/ai_test_gen.png');
