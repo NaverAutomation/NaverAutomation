@@ -111,14 +111,11 @@ export function startScheduler() {
   // 서버 시작 시/스케줄러 시작 시 stuck processing posts 복구
   db.run("UPDATE posts SET status = 'scheduled' WHERE status = 'processing'");
 
-  // 즉시 실행 및 5분 간격 체크
+  // 즉시 실행 및 10초 간격 체크
   processScheduledPosts();
-  schedulerInterval = setInterval(
-    () => {
-      processScheduledPosts();
-    },
-    5 * 60 * 1000,
-  );
+  schedulerInterval = setInterval(() => {
+    processScheduledPosts();
+  }, 10 * 1000);
   return true;
 }
 

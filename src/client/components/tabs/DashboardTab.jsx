@@ -13,7 +13,7 @@ const DashboardTab = React.memo(
     useEffect(() => {
       const timer = setInterval(() => {
         setCurrentTime(new Date());
-      }, 30000); // 30초마다 갱신
+      }, 1000); // 1초마다 갱신
       return () => clearInterval(timer);
     }, []);
 
@@ -115,6 +115,10 @@ const DashboardTab = React.memo(
       if (!nextPost?.scheduled_at) return '';
       const diffMs = new Date(nextPost.scheduled_at).getTime() - currentTime.getTime();
       if (diffMs <= 0) return '곧 발행 예정...';
+      const diffSecs = Math.ceil(diffMs / 1000);
+      if (diffSecs < 60) {
+        return `${diffSecs}초 후 발행`;
+      }
       const diffMins = Math.ceil(diffMs / 60000);
       if (diffMins > 60) {
         const hours = Math.floor(diffMins / 60);
