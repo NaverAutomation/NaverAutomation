@@ -26,6 +26,7 @@
     "lint": "biome lint --write .",
     "format": "biome format --write .",
     "check": "biome check --write .",
+    "test": "vitest run",
     "playwright:install": "playwright install chromium",
     "postinstall": "npm run playwright:install",
     "electron:dev": "cross-env NODE_ENV=development electron .",
@@ -43,7 +44,8 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "socket.io": "^4.8.3",
-    "sqlite3": "^6.0.1"
+    "sqlite3": "^6.0.1",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
@@ -56,6 +58,7 @@
     "electron-builder": "^26.8.1",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.0",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "vitest": "^3.0.5"
   }
 }

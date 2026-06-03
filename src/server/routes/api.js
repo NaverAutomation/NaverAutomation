@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { CONFIG } from '../config.js';
 import db from '../db/database.js';
+import { validateBody } from '../middleware/validate.js';
 import { generateContent, generateTagsWithGemini } from '../services/ai-service.js';
 import { postToNaver } from '../services/naver-service.js';
 import {
@@ -16,6 +17,11 @@ import {
 } from '../services/scheduler.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
 import { getGlobalSetting } from '../utils/supabase.js';
+import {
+  createPostSchema,
+  scheduleKeywordsSchema,
+  schedulePostSchema,
+} from '../utils/validation.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -420,7 +426,7 @@ router.post('/posts/:id/retry', (req, res) => {
 });
 
 // POST /posts/schedule
-router.post('/posts/schedule', (req, res) => {
+router.post('/posts/schedule', validateBody(schedulePostSchema), (req, res) => {
   const {
     account_id,
     title,
@@ -430,7 +436,6 @@ router.post('/posts/schedule', (req, res) => {
     headless,
     post_type = 'manual',
   } = req.body;
-  if (!title || !content) return res.status(400).json({ error: '제목과 내용은 필수입니다.' });
 
   // 1분 ~ 2분 사이의 랜덤한 오차(60,000ms ~ 120,000ms) 추가 적용
   let finalScheduledAt = scheduled_at;
@@ -466,7 +471,7 @@ router.post('/posts/schedule', (req, res) => {
 });
 
 // POST /posts/schedule-keywords  (자동 키워드 예약 일괄 생성)
-router.post('/posts/schedule-keywords', async (req, res) => {
+router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), async (req, res) => {
   const {
     keywords,
     start_time,
@@ -479,13 +484,6 @@ router.post('/posts/schedule-keywords', async (req, res) => {
     image_url, // Storing JSON string containing representative and content images
     split_rep_images,
   } = req.body;
-
-  if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
-    return res.status(400).json({ error: '키워드 목록이 비어있습니다.' });
-  }
-  if (!start_time) {
-    return res.status(400).json({ error: '시작 예약 시간이 필요합니다.' });
-  }
 
   try {
     let aiConfig;
@@ -741,11 +739,8 @@ router.post('/posts/:id/publish-now', (req, res) => {
 });
 
 // POST /post (즉시 발행)
-router.post('/post', async (req, res) => {
+router.post('/post', validateBody(createPostSchema), async (req, res) => {
   const { account_id, title, content, image_url, headless } = req.body;
-  if (!title || !content) {
-    return res.status(400).json({ error: '제목과 본문은 필수입니다.' });
-  }
 
   try {
     if (!getSchedulerStatus().isRunning) {
