@@ -41,22 +41,6 @@ function initializeDatabase() {
       },
     );
 
-    // Campaigns table (신규: 24/7 무한 루프 원본 데이터)
-    db.run(
-      `CREATE TABLE IF NOT EXISTS campaigns (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id TEXT NOT NULL,
-      title TEXT NOT NULL,
-      content TEXT NOT NULL,
-      image_url TEXT,
-      status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`,
-      (err) => {
-        if (err) console.error('Error creating campaigns table:', err.message);
-      },
-    );
-
     // Posts table (scheduled_at 포함)
     db.run(
       `CREATE TABLE IF NOT EXISTS posts (
@@ -72,6 +56,7 @@ function initializeDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       post_type TEXT DEFAULT 'manual',
       campaign_id INTEGER,
+      keyword TEXT,
       FOREIGN KEY (account_id) REFERENCES accounts (id)
     )`,
       (err) => {
@@ -85,6 +70,7 @@ function initializeDatabase() {
           addColumnIfNotExists('posts', 'headless', 'INTEGER');
           addColumnIfNotExists('posts', 'post_type', "TEXT DEFAULT 'manual'");
           addColumnIfNotExists('posts', 'campaign_id', 'INTEGER');
+          addColumnIfNotExists('posts', 'keyword', 'TEXT');
         }
       },
     );
