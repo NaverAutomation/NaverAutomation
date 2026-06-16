@@ -57,6 +57,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -64,6 +65,11 @@ function createWindow() {
       devTools: !app.isPackaged,
     },
     icon: path.join(__dirname, '../assets/icon.png'),
+  });
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    mainWindow.focus();
   });
 
   const targetURL = `http://localhost:${serverPort}`;
