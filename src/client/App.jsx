@@ -44,8 +44,9 @@ const TABS = [
 ];
 
 const App = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [visitedTabs, setVisitedTabs] = useState({ dashboard: true });
   const [reusedPost, setReusedPost] = useState(null);
   const [taskStatus, setTaskStatus] = useState({
     isRunning: false,
@@ -56,7 +57,6 @@ const App = () => {
   const [accounts, setAccounts] = useState([]);
   const [posts, setPosts] = useState([]);
   const [scheduledPosts, setScheduledPosts] = useState([]);
-  const [settings, setSettings] = useState({ openai_api_key: '', gemini_api_key: '' });
   const [appVersion, setAppVersion] = useState('loading');
   const [latestVersion, setLatestVersion] = useState('loading');
   const [updaterState, setUpdaterState] = useState({
@@ -82,21 +82,24 @@ const App = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const handleTabChange = useCallback((tabId) => {
+    setActiveTab(tabId);
+    setVisitedTabs((prev) => ({ ...prev, [tabId]: true }));
+  }, []);
+
   // ── 데이터 페칭
   const fetchAll = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
-      const [acc, ps, sched, sets, taskSt] = await Promise.all([
+      const [acc, ps, sched, taskSt] = await Promise.all([
         apiFetch('/api/accounts'),
         apiFetch('/api/posts'),
         apiFetch('/api/posts/scheduled'),
-        apiFetch('/api/settings'),
         apiFetch('/api/task/status'),
       ]);
       setAccounts(acc);
       setPosts(ps);
       setScheduledPosts(sched);
-      setSettings((prev) => ({ ...prev, ...sets }));
       setTaskStatus(taskSt);
     } catch (err) {
       console.error('데이터 로드 오류:', err);
@@ -239,13 +242,23 @@ const App = () => {
   const handleReusePost = useCallback((post) => {
     setReusedPost(post);
     setActiveTab('generate');
+    setVisitedTabs((prev) => ({ ...prev, generate: true }));
   }, []);
 
   const handleLoginSuccess = useCallback(() => {
     setIsAuthenticated(true);
   }, []);
 
-  if (!isAuthenticated) {
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-base-100 gap-4">
+        <span className="loading loading-spinner loading-lg text-primary"></span>
+        <span className="text-sm font-semibold text-base-content/60">로그인 상태 확인 중...</span>
+      </div>
+    );
+  }
+
+  if (isAuthenticated === false) {
     return <Login onLogin={handleLoginSuccess} />;
   }
 
@@ -290,7 +303,7 @@ const App = () => {
                 type="button"
                 key={tab.id}
                 role="tab"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`tab tab-lg whitespace-nowrap transition-colors duration-200 ${
                   activeTab === tab.id
                     ? 'tab-active !border-primary text-primary font-bold'
@@ -312,58 +325,125 @@ const App = () => {
       {/* ── Content (Rule: rendering-conditional-render) */}
       <main className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex-1">
         <div className="animate-in fade-in duration-300">
-          <Suspense
-            fallback={
-              <div className="flex flex-col items-center justify-center p-20 gap-4">
-                <span className="loading loading-spinner loading-lg text-primary"></span>
-                <span className="text-sm font-semibold text-base-content/60">탭 로딩 중...</span>
-              </div>
-            }
-          >
+          {visitedTabs.dashboard && (
             <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
-              <DashboardTab
-                accounts={accounts}
-                posts={posts}
-                scheduledPosts={scheduledPosts}
-                taskStatus={taskStatus}
-                realtimeLogs={realtimeLogs}
-                fetchAll={fetchAll}
-              />
+              <Suspense
+                fallback={
+                  <div className="flex flex-col items-center justify-center p-20 gap-4">
+                    <span className="loading loading-spinner loading-lg text-primary"></span>
+                    <span className="text-sm font-semibold text-base-content/60">
+                      대시보드 로딩 중...
+                    </span>
+                  </div>
+                }
+              >
+                <DashboardTab
+                  accounts={accounts}
+                  posts={posts}
+                  scheduledPosts={scheduledPosts}
+                  taskStatus={taskStatus}
+                  realtimeLogs={realtimeLogs}
+                  fetchAll={fetchAll}
+                />
+              </Suspense>
             </div>
+          )}
+          {visitedTabs.settings && (
             <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
-              <SettingsTab
-                settings={settings}
-                fetchAll={fetchAll}
-                appVersion={appVersion}
-                latestVersion={latestVersion}
-                onManualUpdateCheck={handleManualUpdateCheck}
-                isCheckingUpdate={isCheckingUpdate}
-              />
+              <Suspense
+                fallback={
+                  <div className="flex flex-col items-center justify-center p-20 gap-4">
+                    <span className="loading loading-spinner loading-lg text-primary"></span>
+                    <span className="text-sm font-semibold text-base-content/60">
+                      설정 로딩 중...
+                    </span>
+                  </div>
+                }
+              >
+                <SettingsTab
+                  appVersion={appVersion}
+                  latestVersion={latestVersion}
+                  onManualUpdateCheck={handleManualUpdateCheck}
+                  isCheckingUpdate={isCheckingUpdate}
+                />
+              </Suspense>
             </div>
+          )}
+          {visitedTabs.accounts && (
             <div style={{ display: activeTab === 'accounts' ? 'block' : 'none' }}>
-              <AccountsTab accounts={accounts} fetchAll={fetchAll} />
+              <Suspense
+                fallback={
+                  <div className="flex flex-col items-center justify-center p-20 gap-4">
+                    <span className="loading loading-spinner loading-lg text-primary"></span>
+                    <span className="text-sm font-semibold text-base-content/60">
+                      계정 관리 로딩 중...
+                    </span>
+                  </div>
+                }
+              >
+                <AccountsTab accounts={accounts} fetchAll={fetchAll} />
+              </Suspense>
             </div>
+          )}
+          {visitedTabs.generate && (
             <div style={{ display: activeTab === 'generate' ? 'block' : 'none' }}>
-              <GenerateTab
-                accounts={accounts}
-                scheduledPosts={scheduledPosts}
-                fetchAll={fetchAll}
-                reusedPost={reusedPost}
-                clearReusedPost={handleClearReusedPost}
-              />
+              <Suspense
+                fallback={
+                  <div className="flex flex-col items-center justify-center p-20 gap-4">
+                    <span className="loading loading-spinner loading-lg text-primary"></span>
+                    <span className="text-sm font-semibold text-base-content/60">
+                      글 생성 로딩 중...
+                    </span>
+                  </div>
+                }
+              >
+                <GenerateTab
+                  accounts={accounts}
+                  scheduledPosts={scheduledPosts}
+                  fetchAll={fetchAll}
+                  reusedPost={reusedPost}
+                  clearReusedPost={handleClearReusedPost}
+                />
+              </Suspense>
             </div>
+          )}
+          {visitedTabs.queue && (
             <div style={{ display: activeTab === 'queue' ? 'block' : 'none' }}>
-              <QueueTab
-                scheduledPosts={scheduledPosts}
-                posts={posts}
-                fetchAll={fetchAll}
-                onReusePost={handleReusePost}
-              />
+              <Suspense
+                fallback={
+                  <div className="flex flex-col items-center justify-center p-20 gap-4">
+                    <span className="loading loading-spinner loading-lg text-primary"></span>
+                    <span className="text-sm font-semibold text-base-content/60">
+                      대기열 로딩 중...
+                    </span>
+                  </div>
+                }
+              >
+                <QueueTab
+                  scheduledPosts={scheduledPosts}
+                  posts={posts}
+                  fetchAll={fetchAll}
+                  onReusePost={handleReusePost}
+                />
+              </Suspense>
             </div>
+          )}
+          {visitedTabs.logs && (
             <div style={{ display: activeTab === 'logs' ? 'block' : 'none' }}>
-              <LogsTab realtimeLogs={realtimeLogs} setRealtimeLogs={setRealtimeLogs} />
+              <Suspense
+                fallback={
+                  <div className="flex flex-col items-center justify-center p-20 gap-4">
+                    <span className="loading loading-spinner loading-lg text-primary"></span>
+                    <span className="text-sm font-semibold text-base-content/60">
+                      로그 로딩 중...
+                    </span>
+                  </div>
+                }
+              >
+                <LogsTab realtimeLogs={realtimeLogs} setRealtimeLogs={setRealtimeLogs} />
+              </Suspense>
             </div>
-          </Suspense>
+          )}
         </div>
       </main>
     </div>

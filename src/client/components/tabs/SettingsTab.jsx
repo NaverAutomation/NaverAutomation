@@ -3,23 +3,37 @@ import { apiFetch } from '../../utils/api';
 import { Btn, Card, Input, SectionTitle } from '../common';
 
 const SettingsTab = React.memo(
-  ({ settings, fetchAll, appVersion, latestVersion, onManualUpdateCheck, isCheckingUpdate }) => {
+  ({ appVersion, latestVersion, onManualUpdateCheck, isCheckingUpdate }) => {
     const [loading, setLoading] = useState(false);
-    const [localSettings, setLocalSettings] = useState(settings);
+    const [localSettings, setLocalSettings] = useState({});
     const [repImages, setRepImages] = useState([]);
     const fileInputRef = React.useRef(null);
 
     useEffect(() => {
-      setLocalSettings(settings);
-      try {
-        const parsed = settings.representative_images
-          ? JSON.parse(settings.representative_images)
-          : [];
-        setRepImages(Array.isArray(parsed) ? parsed : []);
-      } catch {
-        setRepImages([]);
-      }
-    }, [settings]);
+      let isMounted = true;
+      const loadSettings = async () => {
+        try {
+          const data = await apiFetch('/api/settings');
+          if (isMounted) {
+            setLocalSettings(data);
+            try {
+              const parsed = data.representative_images
+                ? JSON.parse(data.representative_images)
+                : [];
+              setRepImages(Array.isArray(parsed) ? parsed : []);
+            } catch {
+              setRepImages([]);
+            }
+          }
+        } catch (err) {
+          console.error('설정 로드 실패:', err);
+        }
+      };
+      loadSettings();
+      return () => {
+        isMounted = false;
+      };
+    }, []);
 
     const handleSave = async () => {
       setLoading(true);
@@ -29,7 +43,6 @@ const SettingsTab = React.memo(
           representative_images: JSON.stringify(repImages),
         };
         await apiFetch('/api/settings', { method: 'POST', body: JSON.stringify(payload) });
-        await fetchAll();
         alert('✅ 설정이 저장되었습니다.');
       } catch (err) {
         alert(`오류: ${err.message}`);
