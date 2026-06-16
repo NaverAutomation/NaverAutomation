@@ -425,9 +425,84 @@ router.get('/posts/scheduled', (req, res) => {
   db.all(
     "SELECT p.*, a.naver_id FROM posts p LEFT JOIN accounts a ON p.account_id = a.id WHERE p.user_id = ? AND p.status IN ('scheduled', 'pending', 'processing') ORDER BY p.scheduled_at ASC NULLS LAST, p.id DESC",
     [req.user.id],
-    (err, rows) => {
+    async (err, activePosts) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json(rows);
+
+      // campaign_id 별로 그룹화할 대상 ID 추출
+      const campaignIds = [
+        ...new Set(activePosts.filter((p) => p.campaign_id).map((p) => p.campaign_id)),
+      ];
+
+      if (campaignIds.length === 0) {
+        const result = activePosts.map((p) => ({ ...p, is_group: false }));
+        return res.json(result);
+      }
+
+      const placeholders = campaignIds.map(() => '?').join(',');
+      db.all(
+        `SELECT p.*, a.naver_id FROM posts p LEFT JOIN accounts a ON p.account_id = a.id WHERE p.campaign_id IN (${placeholders}) ORDER BY p.scheduled_at ASC`,
+        campaignIds,
+        (err, allGroupPosts) => {
+          if (err) return res.status(500).json({ error: err.message });
+
+          const groups = {};
+          for (const post of allGroupPosts) {
+            if (!groups[post.campaign_id]) {
+              groups[post.campaign_id] = [];
+            }
+            groups[post.campaign_id].push(post);
+          }
+
+          const finalizedList = [];
+          const processedCampaigns = new Set();
+
+          for (const post of activePosts) {
+            if (post.campaign_id) {
+              if (processedCampaigns.has(post.campaign_id)) continue;
+              processedCampaigns.add(post.campaign_id);
+
+              const groupPosts = groups[post.campaign_id] || [];
+              const total = groupPosts.length;
+              const published = groupPosts.filter((p) => p.status === 'published').length;
+              const failed = groupPosts.filter((p) => p.status === 'failed').length;
+              const active = groupPosts.filter(
+                (p) =>
+                  p.status === 'scheduled' || p.status === 'pending' || p.status === 'processing',
+              ).length;
+
+              const repPost =
+                groupPosts.find(
+                  (p) =>
+                    p.status === 'scheduled' || p.status === 'pending' || p.status === 'processing',
+                ) || post;
+
+              finalizedList.push({
+                id: `group_${post.campaign_id}`,
+                campaign_id: post.campaign_id,
+                is_group: true,
+                post_type: 'keyword',
+                title: `[자동 키워드 일괄] ${repPost.title} 외 ${total - 1}건`,
+                keyword: repPost.keyword,
+                naver_id: repPost.naver_id,
+                scheduled_at: repPost.scheduled_at,
+                status: repPost.status,
+                total_count: total,
+                published_count: published,
+                active_count: active,
+                failed_count: failed,
+                group_posts: groupPosts,
+              });
+            } else {
+              finalizedList.push({
+                ...post,
+                is_group: false,
+              });
+            }
+          }
+
+          res.json(finalizedList);
+        },
+      );
     },
   );
 });
@@ -514,6 +589,8 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
     image_url, // Storing JSON string containing representative and content images
     split_rep_images,
   } = req.body;
+
+  const campaignId = Date.now();
 
   try {
     let aiConfig;
@@ -623,7 +700,7 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
 
         await new Promise((resolve, reject) => {
           const sql =
-            'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, republish_interval_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+            'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, republish_interval_ms, campaign_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
           db.run(
             sql,
             [
@@ -639,6 +716,7 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
               keyword,
               generatedTags,
               intervalMs > 0 ? intervalMs : null,
+              campaignId,
             ],
             function (err) {
               if (err) reject(err);
@@ -674,14 +752,27 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
 
 // DELETE /posts/scheduled/:id
 router.delete('/posts/scheduled/:id', (req, res) => {
-  db.run(
-    "DELETE FROM posts WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing', 'failed')",
-    [req.params.id, req.user.id],
-    (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ success: true });
-    },
-  );
+  const targetId = req.params.id;
+  if (typeof targetId === 'string' && targetId.startsWith('group_')) {
+    const campaignId = Number(targetId.replace('group_', ''));
+    db.run(
+      "DELETE FROM posts WHERE campaign_id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing')",
+      [campaignId, req.user.id],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, changes: this.changes });
+      },
+    );
+  } else {
+    db.run(
+      "DELETE FROM posts WHERE id = ? AND user_id = ? AND status IN ('scheduled', 'pending', 'processing', 'failed')",
+      [req.params.id, req.user.id],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, changes: this.changes });
+      },
+    );
+  }
 });
 
 // PATCH /posts/scheduled/:id (예약 발행글 수정 - 제목, 본문, 키워드, 태그, 예약 시간)

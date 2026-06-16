@@ -158,174 +158,48 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
           </div>
         ) : (
           <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-            {scheduledPosts.map((post) => (
-              <div
-                key={post.id}
-                className="p-3.5 bg-base-100 border border-base-300 rounded-xl shadow-sm flex flex-col gap-2.5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                      <StatusBadge status={post.status} />
-                      <span className="badge badge-neutral badge-xs font-mono font-bold opacity-60">
-                        {post.naver_id ? `@${post.naver_id}` : '🔄 자동'}
-                      </span>
-                      {post.post_type === 'keyword' && (
-                        <span className="badge badge-secondary badge-xs font-bold">
-                          🔑 자동 키워드
-                        </span>
-                      )}
-                      {(post.post_type === 'manual' || !post.post_type) && (
-                        <span className="badge badge-ghost badge-xs font-bold border border-base-300 text-base-content/75">
-                          ✍️ 수기/AI초안
-                        </span>
-                      )}
-                      {post.keyword && (
-                        <span className="badge badge-accent badge-xs font-bold text-accent-content">
-                          #{post.keyword}
-                        </span>
-                      )}
-                      {post.tags
-                        ? post.tags.split(',').map((t) => (
-                            <span
-                              key={`${post.id}-tag-${t.trim()}`}
-                              className="badge badge-primary badge-outline badge-xs font-bold text-[10px]"
-                            >
-                              {t.trim()}
+            {scheduledPosts.map((post) => {
+              if (post.is_group) {
+                return (
+                  <div
+                    key={post.id}
+                    className="p-3.5 bg-base-100 border border-base-300 rounded-xl shadow-sm flex flex-col gap-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                          <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-2.5 py-0.5 rounded-md">
+                            {'V'.repeat(post.published_count) + 'ㅁ'.repeat(post.active_count)}
+                            {post.active_count === 0 ? '(완료)' : '(예약진행중)'}
+                          </span>
+                          <span className="badge badge-secondary badge-xs font-bold">
+                            🔑 자동 키워드 일괄
+                          </span>
+                          {post.keyword && (
+                            <span className="badge badge-accent badge-xs font-bold text-accent-content">
+                              #{post.keyword}
                             </span>
-                          ))
-                        : null}
-                    </div>
+                          )}
+                        </div>
 
-                    {editingPostId === post.id ? (
-                      <div className="space-y-3 p-3 bg-base-200/50 rounded-lg border border-base-300 animate-in fade-in duration-200">
-                        <div>
-                          <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
-                            제목
-                          </div>
-                          <input
-                            type="text"
-                            value={editingTitle}
-                            onChange={(e) => setEditingTitle(e.target.value)}
-                            className="input input-bordered input-sm w-full bg-base-100 font-bold"
-                          />
-                        </div>
-                        <div>
-                          <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
-                            키워드
-                          </div>
-                          <input
-                            type="text"
-                            value={editingKeyword}
-                            onChange={(e) => setEditingKeyword(e.target.value)}
-                            className="input input-bordered input-sm w-full bg-base-100 font-semibold"
-                            placeholder="예약 키워드"
-                          />
-                        </div>
-                        <div>
-                          <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
-                            태그 (콤마 구분)
-                          </div>
-                          <input
-                            type="text"
-                            value={editingTags}
-                            onChange={(e) => setEditingTags(e.target.value)}
-                            className="input input-bordered input-sm w-full bg-base-100 font-semibold"
-                            placeholder="맛집,데이트"
-                          />
-                        </div>
-                        <div>
-                          <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
-                            본문 내용
-                          </div>
-                          <textarea
-                            value={editingContent}
-                            onChange={(e) => setEditingContent(e.target.value)}
-                            className="textarea textarea-bordered textarea-sm w-full h-32 bg-base-100 font-medium leading-relaxed"
-                          />
-                        </div>
-                        <div>
-                          <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
-                            예약 시간
-                          </div>
-                          <input
-                            type="datetime-local"
-                            value={editingTimeValue}
-                            onChange={(e) => setEditingTimeValue(e.target.value)}
-                            className="input input-bordered input-sm bg-base-100 font-medium w-full text-xs"
-                          />
-                        </div>
-                        <div className="flex gap-2 justify-end">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdatePost(post.id)}
-                            className="btn btn-xs btn-primary font-black cursor-pointer"
-                            disabled={updating}
-                          >
-                            {updating ? (
-                              <span className="loading loading-spinner loading-xs"></span>
-                            ) : (
-                              '저장'
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingPostId(null);
-                            }}
-                            className="btn btn-xs btn-ghost border-base-300 font-bold cursor-pointer"
-                            disabled={updating}
-                          >
-                            취소
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
                         <div className="flex items-center gap-3">
-                          {getThumbnail(post.image_url) ? (
-                            <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-base-300">
-                              <img
-                                src={getThumbnail(post.image_url)}
-                                alt="thumbnail"
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          ) : null}
-                          <h4 className="font-extrabold text-sm text-base-content truncate pr-1">
+                          <h4 className="font-extrabold text-xs text-base-content truncate pr-1">
                             {post.title}
                           </h4>
                         </div>
+
                         <div className="text-[11px] text-base-content/40 mt-2 font-semibold flex items-center gap-2 flex-wrap">
                           {post.scheduled_at ? (
                             <span className="text-warning font-bold text-xs bg-warning/10 px-2 py-0.5 rounded-md">
-                              📅 {parseUtcDate(post.scheduled_at)?.toLocaleString('ko-KR') || '-'}
+                              📅 다음 발행:{' '}
+                              {parseUtcDate(post.scheduled_at)?.toLocaleString('ko-KR') || '-'}
                             </span>
                           ) : (
                             <span className="text-info font-bold text-xs bg-info/10 px-2 py-0.5 rounded-md">
                               ⏳ 즉시 (스케줄러 기동 시)
                             </span>
                           )}
-                          {post.republish_interval_ms > 0 && post.scheduled_at ? (
-                            <span
-                              className="text-secondary font-bold text-[10px] bg-secondary/10 px-2 py-0.5 rounded-md"
-                              title="발행 완료 후 동일 키워드로 새 원고가 자동 생성·예약됩니다"
-                            >
-                              🔁 다음 재발행:{' '}
-                              {new Date(
-                                parseUtcDate(post.scheduled_at).getTime() +
-                                  post.republish_interval_ms,
-                              ).toLocaleString('ko-KR')}
-                            </span>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => startEditing(post)}
-                            className="btn btn-xs btn-ghost btn-circle text-[10px] w-5 h-5 min-h-0 cursor-pointer border border-base-300 hover:bg-base-300"
-                            title="상세 수정"
-                          >
-                            ✏️
-                          </button>
+
                           <button
                             type="button"
                             onClick={() =>
@@ -334,43 +208,371 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                                 [post.id]: !prev[post.id],
                               }))
                             }
-                            className="btn btn-xs btn-ghost btn-circle text-[10px] w-5 h-5 min-h-0 cursor-pointer border border-base-300 hover:bg-base-300"
-                            title={expandedPostIds[post.id] ? '본문 숨기기' : '본문 보기'}
+                            className="btn btn-xs btn-ghost border border-base-300 px-2 h-5 min-h-0 font-bold hover:bg-base-300 cursor-pointer"
+                            title={expandedPostIds[post.id] ? '상세 닫기' : '상세보기'}
                           >
-                            {expandedPostIds[post.id] ? '🔼' : '🔍'}
+                            {expandedPostIds[post.id] ? '상세 닫기 🔼' : '상세보기 🔍'}
                           </button>
                         </div>
-                      </>
+                      </div>
+
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleCancelSchedule(post.id)}
+                          className="btn btn-xs btn-error btn-outline font-bold cursor-pointer"
+                          title="그룹 전체 취소"
+                        >
+                          ✕ 전체취소
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 아코디언 영역: 그룹 내 개별 포스트 리스트 */}
+                    {expandedPostIds[post.id] && post.group_posts && (
+                      <div className="mt-2.5 p-3 bg-base-200/50 rounded-lg border border-base-300/60 space-y-2.5 animate-in slide-in-from-top-1 duration-150">
+                        <div className="text-[11px] font-black text-base-content/50 uppercase tracking-wider mb-1">
+                          📋 그룹 내 예약 글 목록 ({post.group_posts.length}건)
+                        </div>
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                          {post.group_posts.map((gPost) => (
+                            <div
+                              key={gPost.id}
+                              className="p-2.5 bg-base-100 border border-base-300/40 rounded-lg flex items-center justify-between gap-3 shadow-xs"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <span
+                                    className={`badge badge-[10px] font-bold h-4 px-1.5 min-h-0 ${
+                                      gPost.status === 'published'
+                                        ? 'badge-success text-white'
+                                        : gPost.status === 'failed'
+                                          ? 'badge-error text-white'
+                                          : 'badge-warning'
+                                    }`}
+                                  >
+                                    {gPost.status === 'published'
+                                      ? '성공'
+                                      : gPost.status === 'failed'
+                                        ? '실패'
+                                        : '대기'}
+                                  </span>
+                                  <span className="text-[10px] text-base-content/40 font-mono font-bold">
+                                    {gPost.scheduled_at
+                                      ? parseUtcDate(gPost.scheduled_at)?.toLocaleString('ko-KR')
+                                      : '즉시'}
+                                  </span>
+                                </div>
+
+                                {editingPostId === gPost.id ? (
+                                  <div className="space-y-2.5 p-2 bg-base-200/70 rounded-md border border-base-300/80 mt-1">
+                                    <input
+                                      type="text"
+                                      value={editingTitle}
+                                      onChange={(e) => setEditingTitle(e.target.value)}
+                                      className="input input-bordered input-xs w-full font-bold bg-base-100"
+                                      placeholder="제목"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={editingKeyword}
+                                      onChange={(e) => setEditingKeyword(e.target.value)}
+                                      className="input input-bordered input-xs w-full bg-base-100"
+                                      placeholder="키워드"
+                                    />
+                                    <textarea
+                                      value={editingContent}
+                                      onChange={(e) => setEditingContent(e.target.value)}
+                                      className="textarea textarea-bordered textarea-xs w-full h-20 bg-base-100"
+                                      placeholder="본문 내용"
+                                    />
+                                    <input
+                                      type="datetime-local"
+                                      value={editingTimeValue}
+                                      onChange={(e) => setEditingTimeValue(e.target.value)}
+                                      className="input input-bordered input-xs bg-base-100 w-full"
+                                    />
+                                    <div className="flex gap-1.5 justify-end">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdatePost(gPost.id)}
+                                        className="btn btn-2xs btn-primary font-bold cursor-pointer"
+                                        disabled={updating}
+                                      >
+                                        {updating ? '..' : '저장'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingPostId(null)}
+                                        className="btn btn-2xs btn-ghost border-base-300 font-bold cursor-pointer"
+                                      >
+                                        취소
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="font-extrabold text-xs text-base-content truncate">
+                                    {gPost.title}
+                                  </div>
+                                )}
+                              </div>
+
+                              {editingPostId !== gPost.id && (
+                                <div className="flex gap-1 shrink-0">
+                                  {gPost.status !== 'published' && gPost.status !== 'failed' && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handlePublishNow(gPost.id)}
+                                        className="btn btn-[10px] h-5 min-h-0 px-1.5 btn-success btn-outline font-black cursor-pointer"
+                                        title="즉시 발행"
+                                      >
+                                        🚀
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => startEditing(gPost)}
+                                        className="btn btn-[10px] h-5 min-h-0 px-1.5 btn-ghost border border-base-300 font-bold cursor-pointer"
+                                        title="수정"
+                                      >
+                                        ✏️
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCancelSchedule(gPost.id)}
+                                        className="btn btn-[10px] h-5 min-h-0 px-1.5 btn-error btn-outline font-bold cursor-pointer"
+                                        title="취소"
+                                      >
+                                        ✕
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
-                  {editingPostId !== post.id && (
-                    <div className="flex flex-col gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handlePublishNow(post.id)}
-                        className="btn btn-xs btn-success btn-outline font-bold cursor-pointer"
-                        title="즉시 강제발행"
-                      >
-                        🚀 발행
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCancelSchedule(post.id)}
-                        className="btn btn-xs btn-error btn-outline font-bold cursor-pointer"
-                        title="취소"
-                      >
-                        ✕
-                      </button>
+                );
+              }
+
+              // 기존 단일 예약 글 렌더링
+              return (
+                <div
+                  key={post.id}
+                  className="p-3.5 bg-base-100 border border-base-300 rounded-xl shadow-sm flex flex-col gap-2.5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        <StatusBadge status={post.status} />
+                        <span className="badge badge-neutral badge-xs font-mono font-bold opacity-60">
+                          {post.naver_id ? `@${post.naver_id}` : '🔄 자동'}
+                        </span>
+                        {post.post_type === 'keyword' && (
+                          <span className="badge badge-secondary badge-xs font-bold">
+                            🔑 자동 키워드
+                          </span>
+                        )}
+                        {(post.post_type === 'manual' || !post.post_type) && (
+                          <span className="badge badge-ghost badge-xs font-bold border border-base-300 text-base-content/75">
+                            ✍️ 수기/AI초안
+                          </span>
+                        )}
+                        {post.keyword && (
+                          <span className="badge badge-accent badge-xs font-bold text-accent-content">
+                            #{post.keyword}
+                          </span>
+                        )}
+                        {post.tags
+                          ? post.tags.split(',').map((t) => (
+                              <span
+                                key={`${post.id}-tag-${t.trim()}`}
+                                className="badge badge-primary badge-outline badge-xs font-bold text-[10px]"
+                              >
+                                {t.trim()}
+                              </span>
+                            ))
+                          : null}
+                      </div>
+
+                      {editingPostId === post.id ? (
+                        <div className="space-y-3 p-3 bg-base-200/50 rounded-lg border border-base-300 animate-in fade-in duration-200">
+                          <div>
+                            <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                              제목
+                            </div>
+                            <input
+                              type="text"
+                              value={editingTitle}
+                              onChange={(e) => setEditingTitle(e.target.value)}
+                              className="input input-bordered input-sm w-full bg-base-100 font-bold"
+                            />
+                          </div>
+                          <div>
+                            <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                              키워드
+                            </div>
+                            <input
+                              type="text"
+                              value={editingKeyword}
+                              onChange={(e) => setEditingKeyword(e.target.value)}
+                              className="input input-bordered input-sm w-full bg-base-100 font-semibold"
+                              placeholder="예약 키워드"
+                            />
+                          </div>
+                          <div>
+                            <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                              태그 (콤마 구분)
+                            </div>
+                            <input
+                              type="text"
+                              value={editingTags}
+                              onChange={(e) => setEditingTags(e.target.value)}
+                              className="input input-bordered input-sm w-full bg-base-100 font-semibold"
+                              placeholder="맛집,데이트"
+                            />
+                          </div>
+                          <div>
+                            <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                              본문 내용
+                            </div>
+                            <textarea
+                              value={editingContent}
+                              onChange={(e) => setEditingContent(e.target.value)}
+                              className="textarea textarea-bordered textarea-sm w-full h-32 bg-base-100 font-medium leading-relaxed"
+                            />
+                          </div>
+                          <div>
+                            <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                              예약 시간
+                            </div>
+                            <input
+                              type="datetime-local"
+                              value={editingTimeValue}
+                              onChange={(e) => setEditingTimeValue(e.target.value)}
+                              className="input input-bordered input-sm bg-base-100 font-medium w-full text-xs"
+                            />
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdatePost(post.id)}
+                              className="btn btn-xs btn-primary font-black cursor-pointer"
+                              disabled={updating}
+                            >
+                              {updating ? (
+                                <span className="loading loading-spinner loading-xs"></span>
+                              ) : (
+                                '저장'
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingPostId(null);
+                              }}
+                              className="btn btn-xs btn-ghost border-base-300 font-bold cursor-pointer"
+                              disabled={updating}
+                            >
+                              취소
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-3">
+                            {getThumbnail(post.image_url) ? (
+                              <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-base-300">
+                                <img
+                                  src={getThumbnail(post.image_url)}
+                                  alt="thumbnail"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            ) : null}
+                            <h4 className="font-extrabold text-sm text-base-content truncate pr-1">
+                              {post.title}
+                            </h4>
+                          </div>
+                          <div className="text-[11px] text-base-content/40 mt-2 font-semibold flex items-center gap-2 flex-wrap">
+                            {post.scheduled_at ? (
+                              <span className="text-warning font-bold text-xs bg-warning/10 px-2 py-0.5 rounded-md">
+                                📅 {parseUtcDate(post.scheduled_at)?.toLocaleString('ko-KR') || '-'}
+                              </span>
+                            ) : (
+                              <span className="text-info font-bold text-xs bg-info/10 px-2 py-0.5 rounded-md">
+                                ⏳ 즉시 (스케줄러 기동 시)
+                              </span>
+                            )}
+                            {post.republish_interval_ms > 0 && post.scheduled_at ? (
+                              <span
+                                className="text-secondary font-bold text-[10px] bg-secondary/10 px-2 py-0.5 rounded-md"
+                                title="발행 완료 후 동일 키워드로 새 원고가 자동 생성·예약됩니다"
+                              >
+                                🔁 다음 재발행:{' '}
+                                {new Date(
+                                  parseUtcDate(post.scheduled_at).getTime() +
+                                    post.republish_interval_ms,
+                                ).toLocaleString('ko-KR')}
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => startEditing(post)}
+                              className="btn btn-xs btn-ghost btn-circle text-[10px] w-5 h-5 min-h-0 cursor-pointer border border-base-300 hover:bg-base-300"
+                              title="상세 수정"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedPostIds((prev) => ({
+                                  ...prev,
+                                  [post.id]: !prev[post.id],
+                                }))
+                              }
+                              className="btn btn-xs btn-ghost btn-circle text-[10px] w-5 h-5 min-h-0 cursor-pointer border border-base-300 hover:bg-base-300"
+                              title={expandedPostIds[post.id] ? '본문 숨기기' : '본문 보기'}
+                            >
+                              {expandedPostIds[post.id] ? '🔼' : '🔍'}
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
-                  )}
-                </div>
-                {editingPostId !== post.id && expandedPostIds[post.id] && post.content ? (
-                  <div className="text-xs text-base-content/75 bg-base-200/50 p-2.5 rounded-lg max-h-40 overflow-y-auto leading-relaxed font-medium whitespace-pre-wrap border border-base-300/40 animate-in slide-in-from-top-1 duration-150">
-                    {post.content}
+                    {editingPostId !== post.id && (
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handlePublishNow(post.id)}
+                          className="btn btn-xs btn-success btn-outline font-bold cursor-pointer"
+                          title="즉시 강제발행"
+                        >
+                          🚀 발행
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCancelSchedule(post.id)}
+                          className="btn btn-xs btn-error btn-outline font-bold cursor-pointer"
+                          title="취소"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : null}
-              </div>
-            ))}
+                  {editingPostId !== post.id && expandedPostIds[post.id] && post.content ? (
+                    <div className="text-xs text-base-content/75 bg-base-200/50 p-2.5 rounded-lg max-h-40 overflow-y-auto leading-relaxed font-medium whitespace-pre-wrap border border-base-300/40 animate-in slide-in-from-top-1 duration-150">
+                      {post.content}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>
