@@ -34,31 +34,31 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@supabase/supabase-js": "^2.107.0",
+    "@supabase/supabase-js": "^2.108.2",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
-    "electron-updater": "^6.8.3",
+    "electron-updater": "^6.8.9",
     "express": "^5.2.1",
     "open": "^11.0.0",
-    "playwright": "^1.60.0",
+    "playwright": "^1.61.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "socket.io": "^4.8.3",
     "sqlite3": "^6.0.1",
-    "zod": "^3.24.1"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.16",
-    "@tailwindcss/postcss": "^4.3.0",
+    "@biomejs/biome": "2.5.0",
+    "@tailwindcss/postcss": "^4.3.1",
     "@vitejs/plugin-react": "^6.0.2",
     "autoprefixer": "^10.5.0",
     "cross-env": "^10.1.0",
-    "daisyui": "^5.5.20",
-    "electron": "^42.3.2",
-    "electron-builder": "^26.8.1",
+    "daisyui": "^5.5.23",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3",
     "postcss": "^8.5.15",
-    "tailwindcss": "^4.3.0",
+    "tailwindcss": "^4.3.1",
     "vite": "^8.0.16",
-    "vitest": "^3.0.5"
+    "vitest": "^4.1.9"
   }
 }
