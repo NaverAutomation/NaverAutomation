@@ -1,10 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
-import pkgUpdater from 'electron-updater';
-
-const { autoUpdater } = pkgUpdater;
+import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -139,6 +136,8 @@ function registerIpcHandlers() {
     }
 
     try {
+      const { default: pkgUpdater } = await import('electron-updater');
+      const { autoUpdater } = pkgUpdater;
       await autoUpdater.checkForUpdates();
       return { ok: true };
     } catch (err) {
@@ -150,7 +149,10 @@ function registerIpcHandlers() {
 }
 
 // 자동 업데이트 설정 및 강화
-function setupAutoUpdater() {
+async function setupAutoUpdater() {
+  const { default: pkgUpdater } = await import('electron-updater');
+  const { autoUpdater } = pkgUpdater;
+
   // 업데이트 로그 설정
   autoUpdater.logger = {
     info: (msg) => log(`[Auto-Updater] ${msg}`),
@@ -237,6 +239,7 @@ function setupAutoUpdater() {
 
 app.whenReady().then(async () => {
   await initBackend();
+  Menu.setApplicationMenu(null);
   createWindow();
   registerIpcHandlers();
   setupAutoUpdater();
