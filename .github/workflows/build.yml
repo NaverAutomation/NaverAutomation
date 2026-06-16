@@ -23,34 +23,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  create_release:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-
-    steps:
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-
   release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: create_release
     runs-on: windows-latest
     permissions:
       contents: write
-      pull-requests: read
 
     steps:
       - name: Check out Git repository
@@ -68,10 +45,42 @@ jobs:
       - name: Build Web App
         run: npm run build
 
-      - name: Build and Publish Electron App
-        run: npx electron-builder build --win --publish always
+      - name: Build Electron App (no publish)
+        run: npx electron-builder build --win --publish never
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release and Upload Assets
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # 기존 릴리즈가 있으면 삭제 후 재생성
+          gh release delete "$TAG_NAME" --yes 2>/dev/null || true
+
+          # 릴리즈 생성
+          gh release create "$TAG_NAME" \
+            --title "$TAG_NAME" \
+            --notes "Release $TAG_NAME" \
+            --repo "$GH_REPO"
+
+          # 설치 파일 업로드
+          EXE_FILE=$(ls dist_electron/*.exe | grep -v blockmap | head -n 1)
+          BLOCKMAP_FILE=$(ls dist_electron/*.exe.blockmap | head -n 1)
+          YML_FILE=$(ls dist_electron/latest.yml 2>/dev/null || echo "")
+
+          echo "Uploading: $EXE_FILE"
+          gh release upload "$TAG_NAME" "$EXE_FILE" --clobber --repo "$GH_REPO"
+
+          echo "Uploading: $BLOCKMAP_FILE"
+          gh release upload "$TAG_NAME" "$BLOCKMAP_FILE" --clobber --repo "$GH_REPO"
+
+          if [ -n "$YML_FILE" ]; then
+            echo "Uploading: $YML_FILE"
+            gh release upload "$TAG_NAME" "$YML_FILE" --clobber --repo "$GH_REPO"
+          fi
 
   publish_release_notes:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
@@ -84,13 +93,14 @@ jobs:
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Update Release Notes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          # 커밋 로그 기반으로 릴리즈 노트를 자동 생성합니다.
           PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${TAG_NAME}$" | head -n 1 || echo "")
           if [ -n "$PREV_TAG" ]; then
             NOTES=$(git log "${PREV_TAG}..${TAG_NAME}" --pretty=format:"- %s" 2>/dev/null || echo "")
@@ -100,15 +110,3 @@ jobs:
           if [ -n "$NOTES" ]; then
             gh release edit "$TAG_NAME" --notes "$NOTES" || true
           fi
-
-      - name: Clean up stale draft releases
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          gh api "repos/${GH_REPO}/releases" \
-            --jq '.[] | select(.draft == true) | .id' | \
-            while IFS= read -r id; do
-              echo "Deleting stale draft release id: $id"
-              gh api -X DELETE "repos/${GH_REPO}/releases/${id}" || true
-            done
