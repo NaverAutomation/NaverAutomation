@@ -23,8 +23,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  create_release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+
+    steps:
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
   release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: create_release
     runs-on: windows-latest
     permissions:
       contents: write
@@ -63,17 +85,21 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v4
 
-      - name: Resolve version
-        id: version
-        run: echo "release_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Generate and Update Release Notes
+      - name: Update Release Notes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          # gh release edit에 --generate-notes 플래그를 주면 깃허브가 이전 태그 대비 변경 커밋 로그를 자동 생성합니다.
-          gh release edit "$TAG_NAME" --generate-notes || gh release create "$TAG_NAME" --generate-notes
+          # 커밋 로그 기반으로 릴리즈 노트를 자동 생성합니다.
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${TAG_NAME}$" | head -n 1 || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            NOTES=$(git log "${PREV_TAG}..${TAG_NAME}" --pretty=format:"- %s" 2>/dev/null || echo "")
+          else
+            NOTES=$(git log "${TAG_NAME}" --pretty=format:"- %s" --max-count=20 2>/dev/null || echo "")
+          fi
+          if [ -n "$NOTES" ]; then
+            gh release edit "$TAG_NAME" --notes "$NOTES" || true
+          fi
 
       - name: Clean up stale draft releases
         env:
