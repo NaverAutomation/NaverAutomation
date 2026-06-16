@@ -31,6 +31,7 @@ const GenerateTab = React.memo(
     const [editing, setEditing] = useState(false);
     const [randomOffset, setRandomOffset] = useState(30); // ±분
     const [useRandomOffset, setUseRandomOffset] = useState(false);
+    const [customTitle, setCustomTitle] = useState('');
 
     // AI 엔진 기본값 (고정)
     const engine = 'gemini';
@@ -63,6 +64,7 @@ const GenerateTab = React.memo(
     const generatedImageInputRef = useRef(null);
     const repImageInputRef = useRef(null);
     const contentImageInputRef = useRef(null);
+    const draftContentImageInputRef = useRef(null);
 
     // ── 현재 대기열의 활성 키워드 목록 필터링 ──
     const activeKeywords = useMemo(() => {
@@ -156,13 +158,19 @@ const GenerateTab = React.memo(
             content: data.editedContent,
             imageUrl: '',
             tags: '',
+            pexelsImages: [],
           });
         } else {
           const data = await apiFetch('/api/generate', {
             method: 'POST',
-            body: JSON.stringify({ keyword: trimmed, engine }),
+            body: JSON.stringify({
+              keyword: trimmed,
+              title: customTitle.trim() || undefined,
+              engine,
+            }),
           });
           setGenerated(data);
+          setCustomTitle('');
         }
 
         setTimeout(() => {
@@ -182,10 +190,15 @@ const GenerateTab = React.memo(
       if (!generated) return;
       setPosting(true);
       try {
+        const imageUrlPayload = JSON.stringify({
+          representative: generated.imageUrl ? [generated.imageUrl] : [],
+          content: generated.pexelsImages || [],
+        });
+
         const payload = {
           title: generated.title,
           content: generated.content,
-          image_url: generated.imageUrl || null,
+          image_url: imageUrlPayload,
           tags: generated.tags || '',
           headless,
           account_id: null, // 라운드로빈 강제 적용
@@ -210,6 +223,11 @@ const GenerateTab = React.memo(
       if (!generated || !scheduledAt) return alert('예약 시간을 설정하세요.');
       setScheduling(true);
       try {
+        const imageUrlPayload = JSON.stringify({
+          representative: generated.imageUrl ? [generated.imageUrl] : [],
+          content: generated.pexelsImages || [],
+        });
+
         const rawTime = new Date(scheduledAt).toISOString();
         const finalTime = useRandomOffset ? applyRandomOffset(rawTime, randomOffset) : rawTime;
         const data = await apiFetch('/api/posts/schedule', {
@@ -218,7 +236,7 @@ const GenerateTab = React.memo(
             account_id: null, // 라운드로빈 강제 적용
             title: generated.title,
             content: generated.content,
-            image_url: generated.imageUrl,
+            image_url: imageUrlPayload,
             tags: generated.tags || '',
             headless,
             scheduled_at: finalTime,
@@ -236,6 +254,47 @@ const GenerateTab = React.memo(
         alert(`예약 실패: ${err.message}`);
       }
       setScheduling(false);
+    };
+
+    // ── AI 초안 본문 사진 추가 업로드 핸들러 ──
+    const handleDraftContentImageUpload = async (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length === 0) return;
+
+      for (const file of files) {
+        if (file.size > 5 * 1024 * 1024) {
+          alert(`이미지 크기는 5MB 이하여야 합니다: ${file.name}`);
+          continue;
+        }
+
+        const reader = new FileReader();
+        await new Promise((resolve) => {
+          reader.onload = async () => {
+            try {
+              const res = await apiFetch('/api/upload', {
+                method: 'POST',
+                body: JSON.stringify({
+                  fileName: file.name,
+                  base64Data: reader.result,
+                }),
+              });
+              if (res.success && res.url) {
+                setGenerated((prev) => ({
+                  ...prev,
+                  pexelsImages: [...(prev.pexelsImages || []), res.url],
+                }));
+              } else {
+                alert(`업로드 실패: ${res.error || '알 수 없는 오류'}`);
+              }
+            } catch (err) {
+              alert(`업로드 오류: ${err.message}`);
+            } finally {
+              resolve();
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      }
     };
 
     // ── AI 기존 글 수정 ──
@@ -493,10 +552,22 @@ const GenerateTab = React.memo(
               {aiMode === 'generate' ? (
                 /* 새 글 생성 */
                 <>
+                  <div>
+                    <div className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                      원하는 제목 (선택)
+                    </div>
+                    <input
+                      type="text"
+                      className="input input-bordered w-full bg-base-100 placeholder-base-content/30 focus:border-primary shadow-inner text-sm font-semibold mb-4"
+                      placeholder="특정 제목으로 글을 쓰고 싶다면 입력하세요. 비워두면 AI가 자동으로 생성합니다."
+                      value={customTitle}
+                      onChange={(e) => setCustomTitle(e.target.value)}
+                    />
+                  </div>
                   <div className="relative">
-                    <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                    <div className="label-text font-bold block mb-2 px-1 text-base-content/80">
                       어떤 주제로 포스팅할까요?
-                    </label>
+                    </div>
                     <div className="relative">
                       <textarea
                         className="textarea input-lg input-bordered w-full h-[200px] p-4 pl-4 bg-base-100 placeholder-base-content/30 focus:border-primary shadow-inner text-base font-medium"
@@ -524,9 +595,9 @@ const GenerateTab = React.memo(
                 /* 기존 글 수정 */
                 <div className="space-y-4">
                   <div>
-                    <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                    <div className="label-text font-bold block mb-2 px-1 text-base-content/80">
                       ✏️ 수정할 기존 글을 붙여넣으세요
-                    </label>
+                    </div>
                     <textarea
                       className="textarea textarea-bordered w-full h-[200px] bg-base-100 font-medium leading-7 placeholder-base-content/30 focus:border-primary shadow-inner"
                       placeholder="블로그에 올렸거나 작성해둔 글을 여기에 붙여넣으면 AI가 자연스럽게 다듬어 드립니다..."
@@ -535,9 +606,9 @@ const GenerateTab = React.memo(
                     />
                   </div>
                   <div>
-                    <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                    <div className="label-text font-bold block mb-2 px-1 text-base-content/80">
                       📝 수정 지시사항 (선택)
-                    </label>
+                    </div>
                     <input
                       className="input input-bordered w-full bg-base-100 placeholder-base-content/30 focus:border-primary"
                       value={editInstruction}
@@ -566,11 +637,11 @@ const GenerateTab = React.memo(
               </div>
 
               <div className="form-control">
-                <label className="label py-1">
+                <div className="label py-1">
                   <span className="label-text font-bold text-xs text-base-content/80">
                     키워드 목록 (한 줄에 하나씩 입력)
                   </span>
-                </label>
+                </div>
                 <textarea
                   rows={6}
                   className="textarea textarea-bordered bg-base-100 font-semibold leading-normal w-full"
@@ -585,11 +656,8 @@ const GenerateTab = React.memo(
                       ⏳ 현재 예약 대기중인 키워드 목록 ({activeKeywords.length}개):
                     </span>
                     <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2 bg-base-200/50 rounded-lg border border-base-300">
-                      {activeKeywords.map((kw, i) => (
-                        <span
-                          key={`${kw}-${i}`}
-                          className="badge badge-sm badge-neutral font-semibold"
-                        >
+                      {activeKeywords.map((kw) => (
+                        <span key={kw} className="badge badge-sm badge-neutral font-semibold">
                           #{kw}
                         </span>
                       ))}
@@ -600,11 +668,11 @@ const GenerateTab = React.memo(
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="form-control">
-                  <label className="label py-1">
+                  <div className="label py-1">
                     <span className="label-text font-bold text-xs text-base-content/80">
                       첫 번째 글 예약 시작 시간
                     </span>
-                  </label>
+                  </div>
                   <input
                     type="datetime-local"
                     className="input input-bordered bg-base-100 font-semibold text-xs h-[3rem]"
@@ -614,11 +682,11 @@ const GenerateTab = React.memo(
                 </div>
 
                 <div className="form-control">
-                  <label className="label py-1">
+                  <div className="label py-1">
                     <span className="label-text font-bold text-xs text-base-content/80">
                       발행 시간 간격
                     </span>
-                  </label>
+                  </div>
                   <div className="flex items-center gap-2 h-[3rem]">
                     <input
                       type="number"
@@ -661,23 +729,23 @@ const GenerateTab = React.memo(
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* 대표 사진 */}
                 <div className="form-control">
-                  <label className="label py-1">
+                  <div className="label py-1">
                     <span className="label-text font-bold text-xs text-base-content/80">
                       📸 대표 사진 (상단에 원본 그대로 삽입 - 여러 장 가능)
                     </span>
-                  </label>
+                  </div>
                   <div className="flex flex-wrap gap-2 p-3 bg-base-200/30 border border-base-300 rounded-xl min-h-[96px]">
-                    {keywordRepresentativeImages.map((url, idx) => (
+                    {keywordRepresentativeImages.map((url) => (
                       <div
-                        key={`${url}-${idx}`}
+                        key={url}
                         className="relative w-16 h-16 rounded-lg overflow-hidden border border-base-300 group shadow-sm"
                       >
-                        <img src={url} alt={`rep-${idx}`} className="w-full h-full object-cover" />
+                        <img src={url} alt="rep-item" className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() =>
                             setKeywordRepresentativeImages((prev) =>
-                              prev.filter((_, i) => i !== idx),
+                              prev.filter((img) => img !== url),
                             )
                           }
                           className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity"
@@ -707,26 +775,22 @@ const GenerateTab = React.memo(
 
                 {/* 본문 사진 */}
                 <div className="form-control">
-                  <label className="label py-1">
+                  <div className="label py-1">
                     <span className="label-text font-bold text-xs text-base-content/80">
                       🎨 본문 사진 (하단에 삽입되며 AI 필터 변조 적용 - 여러 장 가능)
                     </span>
-                  </label>
+                  </div>
                   <div className="flex flex-wrap gap-2 p-3 bg-base-200/30 border border-base-300 rounded-xl min-h-[96px]">
-                    {keywordContentImages.map((url, idx) => (
+                    {keywordContentImages.map((url) => (
                       <div
-                        key={`${url}-${idx}`}
+                        key={url}
                         className="relative w-16 h-16 rounded-lg overflow-hidden border border-base-300 group shadow-sm"
                       >
-                        <img
-                          src={url}
-                          alt={`content-${idx}`}
-                          className="w-full h-full object-cover"
-                        />
+                        <img src={url} alt="content-item" className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() =>
-                            setKeywordContentImages((prev) => prev.filter((_, i) => i !== idx))
+                            setKeywordContentImages((prev) => prev.filter((img) => img !== url))
                           }
                           className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity"
                         >
@@ -808,7 +872,7 @@ const GenerateTab = React.memo(
                 onChange={(e) => setManualContent(e.target.value)}
               />
               <Input
-                label="태그 (콤마로 구분, 예: 맛집,여행)"
+                label="태그 (공백으로 구분, 예: 맛집 여행 블로그)"
                 className="font-bold text-sm"
                 type="text"
                 placeholder="태그 입력..."
@@ -817,9 +881,9 @@ const GenerateTab = React.memo(
               />
 
               <div className="form-control">
-                <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                <div className="label-text font-bold block mb-2 px-1 text-base-content/80">
                   📸 블로그 본문 맨 위에 넣을 사진 (직접 업로드 또는 URL)
-                </label>
+                </div>
                 <div className="flex gap-3 items-center">
                   <input
                     type="text"
@@ -865,9 +929,9 @@ const GenerateTab = React.memo(
               <div className="mt-6 p-5 bg-base-300/40 border border-base-300 rounded-2xl flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-4">
                   <div>
-                    <label className="label-text font-bold block mb-2 text-base-content/80">
+                    <div className="label-text font-bold block mb-2 text-base-content/80">
                       📅 예약 발행시간 설정
-                    </label>
+                    </div>
                     <input
                       type="datetime-local"
                       value={manualScheduledAt}
@@ -902,9 +966,9 @@ const GenerateTab = React.memo(
                   </div>
                   {import.meta.env.DEV ? (
                     <div>
-                      <label className="label-text font-bold block mb-2 text-base-content/80">
+                      <div className="label-text font-bold block mb-2 text-base-content/80">
                         🖥️ 브라우저 실행 방식
-                      </label>
+                      </div>
                       <div className="form-control bg-base-100 p-2.5 rounded-lg border border-base-300 shadow-inner h-[3rem] flex justify-center">
                         <label className="label cursor-pointer justify-start gap-4 py-0">
                           <input
@@ -998,9 +1062,9 @@ const GenerateTab = React.memo(
               />
 
               <div className="form-control">
-                <label className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                <div className="label-text font-bold block mb-2 px-1 text-base-content/80">
                   📸 블로그 대표 사진 (직접 업로드 또는 URL)
-                </label>
+                </div>
                 <div className="flex gap-3 items-center">
                   <input
                     type="text"
@@ -1048,14 +1112,58 @@ const GenerateTab = React.memo(
                   </div>
                 ) : null}
               </div>
+
+              <div className="form-control">
+                <div className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                  🎨 블로그 본문 사진 목록 (픽셀스 자동 수집 및 추가 사진)
+                </div>
+                <div className="flex flex-wrap gap-2.5 p-3 bg-base-200/30 border border-base-300 rounded-xl min-h-[96px]">
+                  {(generated.pexelsImages || []).map((url) => (
+                    <div
+                      key={url}
+                      className="relative w-20 h-20 rounded-lg overflow-hidden border border-base-300 group shadow-sm bg-base-100"
+                    >
+                      <img src={url} alt="content-img" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setGenerated((prev) => ({
+                            ...prev,
+                            pexelsImages: prev.pexelsImages.filter((img) => img !== url),
+                          }))
+                        }
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => draftContentImageInputRef.current?.click()}
+                    className="w-20 h-20 rounded-lg border-2 border-dashed border-base-300 hover:border-primary flex flex-col items-center justify-center text-base-content/40 hover:text-primary transition-colors bg-base-100 cursor-pointer"
+                  >
+                    <span className="text-xl font-bold">+</span>
+                    <span className="text-[10px] font-black">사진 추가</span>
+                  </button>
+                  <input
+                    ref={draftContentImageInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleDraftContentImageUpload}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="mt-6 p-5 bg-base-300/40 border border-base-300 rounded-2xl flex flex-col gap-4">
               <div className="grid grid-cols-1 gap-4">
                 <div>
-                  <label className="label-text font-bold block mb-2 text-base-content/80">
+                  <div className="label-text font-bold block mb-2 text-base-content/80">
                     📅 예약 발행시간 설정
-                  </label>
+                  </div>
                   <input
                     type="datetime-local"
                     value={scheduledAt}
@@ -1090,9 +1198,9 @@ const GenerateTab = React.memo(
                 </div>
                 {import.meta.env.DEV ? (
                   <div>
-                    <label className="label-text font-bold block mb-2 text-base-content/80">
+                    <div className="label-text font-bold block mb-2 text-base-content/80">
                       🖥️ 브라우저 실행 방식
-                    </label>
+                    </div>
                     <div className="form-control bg-base-100 p-2.5 rounded-lg border border-base-300 shadow-inner h-[3rem] flex justify-center">
                       <label className="label cursor-pointer justify-start gap-4 py-0">
                         <input

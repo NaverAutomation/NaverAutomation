@@ -335,9 +335,9 @@ const DashboardTab = React.memo(
               {selectedPost && (
                 <div className="flex flex-col gap-6">
                   <div>
-                    <label className="label-text font-bold text-base-content/60 block mb-2">
+                    <div className="label-text font-bold text-base-content/60 block mb-2">
                       포스트 제목
-                    </label>
+                    </div>
                     <div className="text-xl font-bold bg-base-100 p-4 rounded-xl border border-base-300 shadow-inner">
                       {selectedPost.title}
                     </div>
@@ -345,9 +345,9 @@ const DashboardTab = React.memo(
 
                   {selectedPost.image_url && (
                     <div>
-                      <label className="label-text font-bold text-base-content/60 block mb-2">
+                      <div className="label-text font-bold text-base-content/60 block mb-2">
                         생성된 커버 이미지
-                      </label>
+                      </div>
                       <figure className="bg-base-100 rounded-xl border border-base-300 p-2 shadow-inner">
                         <img
                           src={selectedPost.image_url}
@@ -359,9 +359,9 @@ const DashboardTab = React.memo(
                   )}
 
                   <div>
-                    <label className="label-text font-bold text-base-content/60 block mb-2">
+                    <div className="label-text font-bold text-base-content/60 block mb-2">
                       본문 내용
-                    </label>
+                    </div>
                     <div className="whitespace-pre-wrap bg-base-100 p-6 rounded-xl text-sm leading-8 max-h-[40vh] overflow-y-auto border border-base-300 shadow-inner font-medium">
                       {selectedPost.content}
                     </div>

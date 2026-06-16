@@ -6,21 +6,72 @@ const SettingsTab = React.memo(
   ({ settings, fetchAll, appVersion, latestVersion, onManualUpdateCheck, isCheckingUpdate }) => {
     const [loading, setLoading] = useState(false);
     const [localSettings, setLocalSettings] = useState(settings);
+    const [repImages, setRepImages] = useState([]);
+    const fileInputRef = React.useRef(null);
 
     useEffect(() => {
       setLocalSettings(settings);
+      try {
+        const parsed = settings.representative_images
+          ? JSON.parse(settings.representative_images)
+          : [];
+        setRepImages(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setRepImages([]);
+      }
     }, [settings]);
 
     const handleSave = async () => {
       setLoading(true);
       try {
-        await apiFetch('/api/settings', { method: 'POST', body: JSON.stringify(localSettings) });
+        const payload = {
+          ...localSettings,
+          representative_images: JSON.stringify(repImages),
+        };
+        await apiFetch('/api/settings', { method: 'POST', body: JSON.stringify(payload) });
         await fetchAll();
         alert('✅ 설정이 저장되었습니다.');
       } catch (err) {
         alert(`오류: ${err.message}`);
       }
       setLoading(false);
+    };
+
+    const handleUploadRepImage = async (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length === 0) return;
+
+      for (const file of files) {
+        if (file.size > 5 * 1024 * 1024) {
+          alert(`이미지 크기는 5MB 이하여야 합니다: ${file.name}`);
+          continue;
+        }
+
+        const reader = new FileReader();
+        await new Promise((resolve) => {
+          reader.onload = async () => {
+            try {
+              const res = await apiFetch('/api/upload', {
+                method: 'POST',
+                body: JSON.stringify({
+                  fileName: file.name,
+                  base64Data: reader.result,
+                }),
+              });
+              if (res.success && res.url) {
+                setRepImages((prev) => [...prev, res.url]);
+              } else {
+                alert(`업로드 실패: ${res.error || '알 수 없는 오류'}`);
+              }
+            } catch (err) {
+              alert(`업로드 오류: ${err.message}`);
+            } finally {
+              resolve();
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      }
     };
 
     return (
@@ -52,7 +103,7 @@ const SettingsTab = React.memo(
         <SectionTitle>⚙️ 서비스 엔진 설정</SectionTitle>
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-1 mb-2">
-            <label className="label-text font-bold px-1 text-base-content/70">AI 모델 설정</label>
+            <div className="label-text font-bold px-1 text-base-content/70">AI 모델 설정</div>
             <select
               className="select select-bordered w-full bg-base-100"
               value={localSettings.gemini_model || 'auto'}
@@ -67,12 +118,24 @@ const SettingsTab = React.memo(
             </p>
           </div>
 
+          <Input
+            label="Pexels API Key (무료 이미지 자동 수집)"
+            type="password"
+            placeholder="Pexels API Key 입력..."
+            value={localSettings.pexels_api_key || ''}
+            onChange={(e) =>
+              setLocalSettings((prev) => ({ ...prev, pexels_api_key: e.target.value }))
+            }
+          />
+
           <div className="alert bg-base-300/50 border border-base-300 rounded-xl mt-2 text-xs sm:text-sm text-base-content/80 shadow-inner">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
               className="stroke-info shrink-0 w-6 h-6"
+              role="img"
+              aria-label="info"
             >
               <path
                 strokeLinecap="round"
@@ -92,6 +155,95 @@ const SettingsTab = React.memo(
                   <li>개인용 로컬 AI를 사용하려면 하단의 Ollama 설정을 이용하세요.</li>
                 )}
               </ul>
+            </div>
+          </div>
+        </div>
+
+        <SectionTitle className="mt-8">📸 대표 이미지 풀(Pool) 관리</SectionTitle>
+        <div className="bg-base-200/60 p-5 rounded-xl border border-base-300 space-y-4 mb-8">
+          <p className="text-xs text-base-content/60 leading-normal">
+            여기에 직접 제작하신 대표 이미지들을 등록해 두시면, 개별 포스팅 시 대표 이미지가
+            지정되지 않았을 때 순환 방식으로 자동 매칭해 줍니다. (같은 이미지가 연속으로 사용되지
+            않도록 제어)
+          </p>
+
+          <div className="flex flex-wrap gap-2.5 p-3 bg-base-100 border border-base-300 rounded-xl min-h-[96px]">
+            {repImages.map((url) => (
+              <div
+                key={url}
+                className="relative w-20 h-20 rounded-lg overflow-hidden border border-base-300 group shadow-sm"
+              >
+                <img src={url} alt="rep-pool-item" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setRepImages((prev) => prev.filter((img) => img !== url))}
+                  className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity"
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-20 h-20 rounded-lg border-2 border-dashed border-base-300 hover:border-primary flex flex-col items-center justify-center text-base-content/40 hover:text-primary transition-colors bg-base-200/30 cursor-pointer"
+            >
+              <span className="text-xl font-bold">+</span>
+              <span className="text-[10px] font-black">이미지 추가</span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*"
+              className="hidden"
+              onChange={handleUploadRepImage}
+            />
+          </div>
+
+          <div className="form-control">
+            <div className="label py-1">
+              <span className="label-text font-bold text-xs text-base-content/80">
+                대표 이미지 순환 방식 설정
+              </span>
+            </div>
+            <div className="flex gap-6 items-center pt-1">
+              <label className="label cursor-pointer gap-2 py-0">
+                <input
+                  type="radio"
+                  name="image-rotation"
+                  className="radio radio-primary radio-sm"
+                  checked={
+                    (localSettings.representative_image_rotation || 'sequential') === 'sequential'
+                  }
+                  onChange={() =>
+                    setLocalSettings((prev) => ({
+                      ...prev,
+                      representative_image_rotation: 'sequential',
+                    }))
+                  }
+                />
+                <span className="label-text font-semibold text-xs">
+                  순차적으로 적용 (1, 2, 3...)
+                </span>
+              </label>
+              <label className="label cursor-pointer gap-2 py-0">
+                <input
+                  type="radio"
+                  name="image-rotation"
+                  className="radio radio-primary radio-sm"
+                  checked={localSettings.representative_image_rotation === 'random'}
+                  onChange={() =>
+                    setLocalSettings((prev) => ({
+                      ...prev,
+                      representative_image_rotation: 'random',
+                    }))
+                  }
+                />
+                <span className="label-text font-semibold text-xs">
+                  랜덤으로 적용 (연속 중복 배제)
+                </span>
+              </label>
             </div>
           </div>
         </div>
@@ -122,7 +274,7 @@ const SettingsTab = React.memo(
           </>
         )}
 
-        <div className="mt-8 pt-6 border-t border-base-300 flex justify-end">
+        <div className="mt-8 pt-6 border-t border-t-base-300 flex justify-end">
           <Btn
             variant="primary"
             onClick={handleSave}
@@ -140,5 +292,7 @@ const SettingsTab = React.memo(
     );
   },
 );
+
+SettingsTab.displayName = 'SettingsTab';
 
 export default SettingsTab;

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 
 export const Card = React.memo(({ children, className = '', style = {} }) => (
   <div className={`card bg-base-200 border border-base-300 shadow-xl ${className}`} style={style}>
@@ -14,33 +14,43 @@ export const SectionTitle = React.memo(({ children, className = '' }) => (
   </h2>
 ));
 
-export const Input = React.memo(({ label, className = '', ...props }) => (
-  <div className="form-control w-full mb-4">
-    {label && (
-      <label className="label py-1">
-        <span className="label-text font-bold text-base-content/80">{label}</span>
-      </label>
-    )}
-    <input
-      className={`input input-bordered bg-base-100 focus:border-primary focus:outline-none transition-colors w-full ${className}`}
-      {...props}
-    />
-  </div>
-));
+export const Input = React.memo(({ label, className = '', id, ...props }) => {
+  const defaultId = useId();
+  const inputId = id || defaultId;
+  return (
+    <div className="form-control w-full mb-4">
+      {label && (
+        <label htmlFor={inputId} className="label py-1">
+          <span className="label-text font-bold text-base-content/80">{label}</span>
+        </label>
+      )}
+      <input
+        id={inputId}
+        className={`input input-bordered bg-base-100 focus:border-primary focus:outline-none transition-colors w-full ${className}`}
+        {...props}
+      />
+    </div>
+  );
+});
 
-export const Textarea = React.memo(({ label, className = '', ...props }) => (
-  <div className="form-control w-full mb-4">
-    {label && (
-      <label className="label py-1">
-        <span className="label-text font-bold text-base-content/80">{label}</span>
-      </label>
-    )}
-    <textarea
-      className={`textarea textarea-bordered bg-base-100 focus:border-primary focus:outline-none transition-colors w-full leading-relaxed resize-y ${className}`}
-      {...props}
-    />
-  </div>
-));
+export const Textarea = React.memo(({ label, className = '', id, ...props }) => {
+  const defaultId = useId();
+  const inputId = id || defaultId;
+  return (
+    <div className="form-control w-full mb-4">
+      {label && (
+        <label htmlFor={inputId} className="label py-1">
+          <span className="label-text font-bold text-base-content/80">{label}</span>
+        </label>
+      )}
+      <textarea
+        id={inputId}
+        className={`textarea textarea-bordered bg-base-100 focus:border-primary focus:outline-none transition-colors w-full leading-relaxed resize-y ${className}`}
+        {...props}
+      />
+    </div>
+  );
+});
 
 export const Btn = React.memo(
   ({ children, variant = 'primary', className = '', block = false, type = 'button', ...props }) => {
@@ -89,10 +99,16 @@ export const Modal = React.memo(({ title, show, onClose, children }) => {
     <dialog
       className="modal modal-open bg-black/60 backdrop-blur-sm transition-all"
       onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose();
+      }}
     >
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: click propagation prevention */}
       <div
         className="modal-box w-11/12 max-w-4xl bg-base-200 border border-base-300 shadow-2xl p-0 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        role="presentation"
       >
         <header className="px-6 py-4 border-b border-base-300 flex justify-between items-center bg-base-300/50">
           <h3 className="font-extrabold text-xl text-base-content tracking-tight">{title}</h3>

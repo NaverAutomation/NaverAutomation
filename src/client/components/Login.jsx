@@ -45,9 +45,9 @@ const Login = ({ onLogin }) => {
 
           <form onSubmit={handleSubmit}>
             <div className="form-control">
-              <label className="label">
+              <div className="label">
                 <span className="label-text">이메일</span>
-              </label>
+              </div>
               <input
                 type="email"
                 placeholder="이메일을 입력하세요"
@@ -59,9 +59,9 @@ const Login = ({ onLogin }) => {
             </div>
 
             <div className="form-control mt-4">
-              <label className="label">
+              <div className="label">
                 <span className="label-text">비밀번호</span>
-              </label>
+              </div>
               <input
                 type="password"
                 placeholder="비밀번호를 입력하세요"

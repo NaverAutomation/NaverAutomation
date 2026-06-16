@@ -200,9 +200,9 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                     {editingPostId === post.id ? (
                       <div className="space-y-3 p-3 bg-base-200/50 rounded-lg border border-base-300 animate-in fade-in duration-200">
                         <div>
-                          <label className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                          <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
                             제목
-                          </label>
+                          </div>
                           <input
                             type="text"
                             value={editingTitle}
@@ -211,9 +211,9 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                           />
                         </div>
                         <div>
-                          <label className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                          <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
                             키워드
-                          </label>
+                          </div>
                           <input
                             type="text"
                             value={editingKeyword}
@@ -223,9 +223,9 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                           />
                         </div>
                         <div>
-                          <label className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                          <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
                             태그 (콤마 구분)
-                          </label>
+                          </div>
                           <input
                             type="text"
                             value={editingTags}
@@ -235,9 +235,9 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                           />
                         </div>
                         <div>
-                          <label className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                          <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
                             본문 내용
-                          </label>
+                          </div>
                           <textarea
                             value={editingContent}
                             onChange={(e) => setEditingContent(e.target.value)}
@@ -245,9 +245,9 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                           />
                         </div>
                         <div>
-                          <label className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
+                          <div className="label-text font-bold block mb-1 text-[11px] text-base-content/70">
                             예약 시간
-                          </label>
+                          </div>
                           <input
                             type="datetime-local"
                             value={editingTimeValue}
