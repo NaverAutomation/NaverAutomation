@@ -27,7 +27,7 @@ describe('Zod validation schema tests', () => {
       const result = createPostSchema.safeParse(invalidData);
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.errors[0].path).toContain('title');
+        expect(result.error.issues[0].path).toContain('title');
       }
     });
 
@@ -38,7 +38,7 @@ describe('Zod validation schema tests', () => {
       const result = createPostSchema.safeParse(invalidData);
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.errors[0].path).toContain('content');
+        expect(result.error.issues[0].path).toContain('content');
       }
     });
   });
@@ -63,7 +63,7 @@ describe('Zod validation schema tests', () => {
       const result = schedulePostSchema.safeParse(invalidData);
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.errors[0].message).toBe('올바른 날짜 형식이 아닙니다.');
+        expect(result.error.issues[0].message).toBe('올바른 날짜 형식이 아닙니다.');
       }
     });
   });
