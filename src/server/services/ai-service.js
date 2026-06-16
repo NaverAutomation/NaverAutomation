@@ -10,7 +10,7 @@ function _selectBestGeminiModel(_content) {
 /**
  * Google Gemini를 이용한 텍스트 생성 (자동 모델 선택 및 Fallback 포함)
  */
-async function generateWithGemini(apiKey, keyword, modelPreference = 'auto') {
+async function generateWithGemini(apiKey, keyword, modelPreference = 'auto', title = null) {
   const genAI = new GoogleGenerativeAI(apiKey);
 
   // 모델 결정 (유저 요청에 따라 2.5 Flash Lite 우선)
@@ -32,17 +32,31 @@ async function generateWithGemini(apiKey, keyword, modelPreference = 'auto') {
   try {
     const model = genAI.getGenerativeModel({ model: modelName });
 
-    const prompt = `당신은 블로그 포스팅 전문가입니다. 반드시 아래 형식을 지켜주세요.
+    let prompt = '';
+    if (title) {
+      prompt = `당신은 블로그 포스팅 전문가입니다. 반드시 아래 형식을 지켜주세요.
+[TITLE]${title}[/TITLE]
+[CONTENT]본문[/CONTENT]
+
+지정된 제목: ${title}
+주제 키워드: ${keyword}
+지정된 제목에 가장 어울리고 유익한 블로그 포스팅 본문(원고)을 정성껏 작성해줘.`;
+    } else {
+      prompt = `당신은 블로그 포스팅 전문가입니다. 반드시 아래 형식을 지켜주세요.
 [TITLE]제목[/TITLE]
 [CONTENT]본문[/CONTENT]
 
 주제: ${keyword}
 원고를 작성해줘.`;
+    }
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const fullText = response.text();
     const parsed = parseAIResponse(fullText);
+    if (title) {
+      parsed.title = title; // 제목 강제 고정
+    }
     return { ...parsed, modelUsed: modelName };
   } catch (error) {
     // 429 에러 발생 시 리트라이 로직
@@ -95,7 +109,7 @@ export async function generateRewriteWithGemini(
 /**
  * Ollama를 이용한 텍스트 생성
  */
-async function generateWithOllama(endpoint, model, keyword) {
+async function generateWithOllama(endpoint, model, keyword, title = null) {
   try {
     // 사용자가 입력한 엔드포인트가 없으면 로컬 기본값(11434) 사용
     let baseUrl = (endpoint || 'http://localhost:11434').trim();
@@ -114,7 +128,9 @@ async function generateWithOllama(endpoint, model, keyword) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: model || 'gemma4',
-        prompt: `당신은 블로그 포스팅 전문가입니다. 반드시 아래 형식을 지켜주세요.\n[TITLE]제목[/TITLE]\n[CONTENT]본문[/CONTENT]\n\n${keyword} 주제로 블로그 포스팅 원고를 작성해줘.`,
+        prompt: title
+          ? `당신은 블로그 포스팅 전문가입니다. 반드시 아래 형식을 지켜주세요.\n[TITLE]${title}[/TITLE]\n[CONTENT]본문[/CONTENT]\n\n지정된 제목 "${title}"과 주제 "${keyword}"에 맞춰 블로그 포스팅 본문을 작성해줘.`
+          : `당신은 블로그 포스팅 전문가입니다. 반드시 아래 형식을 지켜주세요.\n[TITLE]제목[/TITLE]\n[CONTENT]본문[/CONTENT]\n\n${keyword} 주제로 블로그 포스팅 원고를 작성해줘.`,
         stream: false,
       }),
     });
@@ -126,6 +142,9 @@ async function generateWithOllama(endpoint, model, keyword) {
     const data = await response.json();
     const fullText = data.response; // /api/generate는 'response' 필드 사용
     const parsed = parseAIResponse(fullText);
+    if (title) {
+      parsed.title = title; // 제목 강제 고정
+    }
     return { ...parsed, modelUsed: model || 'gemma4' };
   } catch (error) {
     console.error('Ollama Content Generation Error:', error);
@@ -149,15 +168,15 @@ function parseAIResponse(fullText) {
 /**
  * 통합 콘텐츠 생성 함수
  */
-export async function generateContent(engine, apiKeyOrConfig, keyword) {
+export async function generateContent(engine, apiKeyOrConfig, keyword, title = null) {
   if (engine === 'gemini') {
     const { apiKey, model } = apiKeyOrConfig;
     const actualKey = typeof apiKeyOrConfig === 'string' ? apiKeyOrConfig : apiKey;
     const actualModel = typeof apiKeyOrConfig === 'string' ? 'auto' : model;
-    return await generateWithGemini(actualKey, keyword, actualModel);
+    return await generateWithGemini(actualKey, keyword, actualModel, title);
   } else if (engine === 'ollama') {
     const { endpoint, model } = apiKeyOrConfig;
-    return await generateWithOllama(endpoint, model, keyword);
+    return await generateWithOllama(endpoint, model, keyword, title);
   } else {
     throw new Error('OpenAI 서비스가 비활성화되었습니다. Gemini 또는 Ollama를 사용해주세요.');
   }
