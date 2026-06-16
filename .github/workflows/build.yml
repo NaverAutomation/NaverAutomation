@@ -66,20 +66,26 @@ jobs:
             --notes "Release $TAG_NAME" \
             --repo "$GH_REPO"
 
-          # 설치 파일 업로드
-          EXE_FILE=$(ls dist_electron/*.exe | grep -v blockmap | head -n 1)
-          BLOCKMAP_FILE=$(ls dist_electron/*.exe.blockmap | head -n 1)
-          YML_FILE=$(ls dist_electron/latest.yml 2>/dev/null || echo "")
+          # latest.yml이 참조하는 하이픈 형식 파일명으로 rename 후 업로드
+          # electron-builder가 로컬에서는 공백/점을 쓰지만 latest.yml에는 하이픈으로 기록함
+          EXE_SRC=$(ls "dist_electron/"*.exe | grep -v blockmap | head -n 1)
+          BLOCKMAP_SRC=$(ls "dist_electron/"*.exe.blockmap | head -n 1)
+          VERSION="${TAG_NAME#v}"
+          EXE_DEST="dist_electron/Naver-Auto-Setup-${VERSION}.exe"
+          BLOCKMAP_DEST="dist_electron/Naver-Auto-Setup-${VERSION}.exe.blockmap"
 
-          echo "Uploading: $EXE_FILE"
-          gh release upload "$TAG_NAME" "$EXE_FILE" --clobber --repo "$GH_REPO"
+          cp "$EXE_SRC" "$EXE_DEST"
+          cp "$BLOCKMAP_SRC" "$BLOCKMAP_DEST"
 
-          echo "Uploading: $BLOCKMAP_FILE"
-          gh release upload "$TAG_NAME" "$BLOCKMAP_FILE" --clobber --repo "$GH_REPO"
+          echo "Uploading: $EXE_DEST"
+          gh release upload "$TAG_NAME" "$EXE_DEST" --clobber --repo "$GH_REPO"
 
-          if [ -n "$YML_FILE" ]; then
-            echo "Uploading: $YML_FILE"
-            gh release upload "$TAG_NAME" "$YML_FILE" --clobber --repo "$GH_REPO"
+          echo "Uploading: $BLOCKMAP_DEST"
+          gh release upload "$TAG_NAME" "$BLOCKMAP_DEST" --clobber --repo "$GH_REPO"
+
+          if [ -f "dist_electron/latest.yml" ]; then
+            echo "Uploading: dist_electron/latest.yml"
+            gh release upload "$TAG_NAME" "dist_electron/latest.yml" --clobber --repo "$GH_REPO"
           fi
 
   publish_release_notes:
