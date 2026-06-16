@@ -153,226 +153,238 @@ export function getSchedulerStatus() {
 export async function processScheduledPosts() {
   if (activeWorkers >= MAX_WORKERS) return;
 
-  const today = new Date().toISOString().split('T')[0];
-  await new Promise((resolve) => {
-    db.run(
-      'UPDATE accounts SET daily_post_count = 0, last_post_date = ? WHERE last_post_date != ? OR last_post_date IS NULL',
-      [today, today],
-      () => resolve(),
-    );
-  });
+  try {
+    // 10분 이상 stuck된 processing 포스트가 있다면 failed 처리하여 무한 대기 방지
+    await new Promise((resolve) => {
+      db.run(
+        "UPDATE posts SET status = 'failed' WHERE status = 'processing' AND (scheduled_at IS NULL OR datetime(scheduled_at) < datetime('now', '-10 minutes'))",
+        () => resolve(),
+      );
+    });
 
-  db.all(
-    "SELECT * FROM posts WHERE status IN ('scheduled', 'pending') AND (scheduled_at IS NULL OR datetime(scheduled_at) <= datetime('now'))",
-    [],
-    async (err, posts) => {
-      if (err) {
-        emitLog('error', `예약 포스트 조회 실패: ${err.message}`);
-        return;
-      }
+    const today = new Date().toISOString().split('T')[0];
+    await new Promise((resolve) => {
+      db.run(
+        'UPDATE accounts SET daily_post_count = 0, last_post_date = ? WHERE last_post_date != ? OR last_post_date IS NULL',
+        [today, today],
+        () => resolve(),
+      );
+    });
 
-      for (const post of posts) {
-        if (activeWorkers >= MAX_WORKERS) break;
+    db.all(
+      "SELECT * FROM posts WHERE status IN ('scheduled', 'pending') AND (scheduled_at IS NULL OR datetime(scheduled_at) <= datetime('now'))",
+      [],
+      async (err, posts) => {
+        if (err) {
+          emitLog('error', `예약 포스트 조회 실패: ${err.message}`);
+          return;
+        }
 
-        activeWorkers++;
-        emitTaskStatus();
+        for (const post of posts) {
+          if (activeWorkers >= MAX_WORKERS) break;
 
-        try {
-          // 상태를 processing으로 변경하여 중복 실행 방지
-          await new Promise((resolve, reject) => {
-            db.run("UPDATE posts SET status = 'processing' WHERE id = ?", [post.id], (err) => {
-              if (err) reject(err);
-              else resolve();
-            });
-          });
+          activeWorkers++;
+          emitTaskStatus();
 
-          // 1. 계정 확인
-          let account = null;
-          if (post.account_id) {
-            account = await new Promise((resolve, reject) => {
-              db.get('SELECT * FROM accounts WHERE id = ?', [post.account_id], (err, row) => {
+          try {
+            // 상태를 processing으로 변경하여 중복 실행 방지
+            await new Promise((resolve, reject) => {
+              db.run("UPDATE posts SET status = 'processing' WHERE id = ?", [post.id], (err) => {
                 if (err) reject(err);
-                else resolve(row);
+                else resolve();
               });
             });
-            if (account) {
-              if (account.status !== 'active') {
-                emitLog(
-                  'warn',
-                  `예약 발행 실패: 선택된 계정(${account.naver_id})이 비활성화 상태입니다. (게시글: ${post.title})`,
-                  post.user_id,
-                );
-                account = null;
-              } else if (account.daily_post_count >= 15) {
-                emitLog(
-                  'warn',
-                  `예약 발행 실패: 선택된 계정(${account.naver_id})의 일일 발행 한도(15회)를 초과했습니다. (게시글: ${post.title})`,
-                  post.user_id,
-                );
-                account = null;
-              }
-            }
-          } else {
-            account = await getAvailableAccount(post.user_id);
-          }
 
-          if (!account) {
+            // 1. 계정 확인
+            let account = null;
+            if (post.account_id) {
+              account = await new Promise((resolve, reject) => {
+                db.get('SELECT * FROM accounts WHERE id = ?', [post.account_id], (err, row) => {
+                  if (err) reject(err);
+                  else resolve(row);
+                });
+              });
+              if (account) {
+                if (account.status !== 'active') {
+                  emitLog(
+                    'warn',
+                    `예약 발행 실패: 선택된 계정(${account.naver_id})이 비활성화 상태입니다. (게시글: ${post.title})`,
+                    post.user_id,
+                  );
+                  account = null;
+                } else if (account.daily_post_count >= 15) {
+                  emitLog(
+                    'warn',
+                    `예약 발행 실패: 선택된 계정(${account.naver_id})의 일일 발행 한도(15회)를 초과했습니다. (게시글: ${post.title})`,
+                    post.user_id,
+                  );
+                  account = null;
+                }
+              }
+            } else {
+              account = await getAvailableAccount(post.user_id);
+            }
+
+            if (!account) {
+              emitLog(
+                'warn',
+                `예약 발행 실패: 사용 가능한 네이버 계정이 없습니다. (게시글: ${post.title})`,
+                post.user_id,
+              );
+              db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
+              continue;
+            }
+
             emitLog(
-              'warn',
-              `예약 발행 실패: 사용 가능한 네이버 계정이 없습니다. (게시글: ${post.title})`,
+              'info',
+              `예약 포스트 [${post.title}] 발행을 시작합니다. (계정: ${account.naver_id})`,
               post.user_id,
             );
-            db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
-            continue;
-          }
 
-          emitLog(
-            'info',
-            `예약 포스트 [${post.title}] 발행을 시작합니다. (계정: ${account.naver_id})`,
-            post.user_id,
-          );
+            // AI 원고 생성 (Rewrite) - 유사 문서 방지를 위한 자동 재작성 적용
+            const finalTitle = post.title;
+            const finalContent = post.content;
 
-          // AI 원고 생성 (Rewrite) - 유사 문서 방지를 위한 자동 재작성 적용
-          const finalTitle = post.title;
-          const finalContent = post.content;
-
-          // 2. 네이버 블로그 포스팅
-          const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
-          const postResult = await postToNaver(
-            decryptedAccount,
-            {
-              title: finalTitle,
-              content: finalContent,
-              image_url: post.image_url,
-              tags: post.tags,
-              keyword: post.keyword,
-              user_id: post.user_id,
-            },
-            {
-              headless: true,
-              isScheduler: true,
-              onProgress: (level, msg) => emitLog(level, msg, post.user_id),
-            },
-          );
-
-          if (postResult.success) {
-            // 성공 시 상태 업데이트 및 계정 카운트/순서 업데이트
-            db.run("UPDATE posts SET status = 'published', account_id = ? WHERE id = ?", [
-              account.id,
-              post.id,
-            ]);
-            db.run(
-              'UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?',
-              [new Date().toISOString().split('T')[0], account.id],
+            // 2. 네이버 블로그 포스팅
+            const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
+            const postResult = await postToNaver(
+              decryptedAccount,
+              {
+                title: finalTitle,
+                content: finalContent,
+                image_url: post.image_url,
+                tags: post.tags,
+                keyword: post.keyword,
+                user_id: post.user_id,
+              },
+              {
+                headless: true,
+                isScheduler: true,
+                onProgress: (level, msg) => emitLog(level, msg, post.user_id),
+              },
             );
-            cleanupOldPublishedPosts(post.user_id);
-            emitLog('success', `예약 포스팅 성공: ${post.title}`, post.user_id);
 
-            // ── 재발행 체인: 동일 키워드로 새 원고 생성 후 다음 예약 등록 ──
-            if (post.republish_interval_ms && post.keyword && post.post_type === 'keyword') {
-              try {
-                const nextScheduledAt = new Date(
-                  Date.now() + post.republish_interval_ms,
-                ).toISOString();
-                emitLog(
-                  'info',
-                  `[재발행] 키워드 "${post.keyword}" 새 원고 생성 중... 다음 발행: ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`,
-                  post.user_id,
-                );
+            if (postResult.success) {
+              // 성공 시 상태 업데이트 및 계정 카운트/순서 업데이트
+              db.run("UPDATE posts SET status = 'published', account_id = ? WHERE id = ?", [
+                account.id,
+                post.id,
+              ]);
+              db.run(
+                'UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?',
+                [new Date().toISOString().split('T')[0], account.id],
+              );
+              cleanupOldPublishedPosts(post.user_id);
+              emitLog('success', `예약 포스팅 성공: ${post.title}`, post.user_id);
 
-                // Gemini API 키 조회
-                const apiKey = await new Promise((resolve) => {
-                  db.get(
-                    "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
-                    [post.user_id],
-                    (err, row) => {
-                      if (err || !row || !row.value) return resolve(null);
-                      try {
-                        resolve(decrypt(row.value));
-                      } catch {
-                        resolve(null);
-                      }
-                    },
+              // ── 재발행 체인: 동일 키워드로 새 원고 생성 후 다음 예약 등록 ──
+              if (post.republish_interval_ms && post.keyword && post.post_type === 'keyword') {
+                try {
+                  const nextScheduledAt = new Date(
+                    Date.now() + post.republish_interval_ms,
+                  ).toISOString();
+                  emitLog(
+                    'info',
+                    `[재발행] 키워드 "${post.keyword}" 새 원고 생성 중... 다음 발행: ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`,
+                    post.user_id,
                   );
-                });
 
-                if (apiKey) {
-                  const geminiModel = await new Promise((resolve) => {
+                  // Gemini API 키 조회
+                  const apiKey = await new Promise((resolve) => {
                     db.get(
-                      "SELECT value FROM settings WHERE user_id = ? AND key = 'gemini_model'",
+                      "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
                       [post.user_id],
-                      (_err, row) => resolve(row ? row.value : 'auto'),
-                    );
-                  });
-
-                  const newContent = await generateContent(
-                    'gemini',
-                    { apiKey, model: geminiModel },
-                    post.keyword,
-                  );
-                  const newTags = await generateTagsWithGemini(
-                    apiKey,
-                    post.keyword,
-                    newContent.title,
-                    newContent.content,
-                  );
-
-                  await new Promise((resolve, reject) => {
-                    db.run(
-                      'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, republish_interval_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                      [
-                        post.user_id,
-                        null, // 라운드로빈 사용
-                        newContent.title,
-                        newContent.content,
-                        post.image_url,
-                        post.headless,
-                        nextScheduledAt,
-                        'scheduled',
-                        'keyword',
-                        post.keyword,
-                        newTags,
-                        post.republish_interval_ms,
-                      ],
-                      (err) => {
-                        if (err) reject(err);
-                        else resolve();
+                      (err, row) => {
+                        if (err || !row || !row.value) return resolve(null);
+                        try {
+                          resolve(decrypt(row.value));
+                        } catch {
+                          resolve(null);
+                        }
                       },
                     );
                   });
 
+                  if (apiKey) {
+                    const geminiModel = await new Promise((resolve) => {
+                      db.get(
+                        "SELECT value FROM settings WHERE user_id = ? AND key = 'gemini_model'",
+                        [post.user_id],
+                        (_err, row) => resolve(row ? row.value : 'auto'),
+                      );
+                    });
+
+                    const newContent = await generateContent(
+                      'gemini',
+                      { apiKey, model: geminiModel },
+                      post.keyword,
+                    );
+                    const newTags = await generateTagsWithGemini(
+                      apiKey,
+                      post.keyword,
+                      newContent.title,
+                      newContent.content,
+                    );
+
+                    await new Promise((resolve, reject) => {
+                      db.run(
+                        'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, republish_interval_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        [
+                          post.user_id,
+                          null, // 라운드로빈 사용
+                          newContent.title,
+                          newContent.content,
+                          post.image_url,
+                          post.headless,
+                          nextScheduledAt,
+                          'scheduled',
+                          'keyword',
+                          post.keyword,
+                          newTags,
+                          post.republish_interval_ms,
+                        ],
+                        (err) => {
+                          if (err) reject(err);
+                          else resolve();
+                        },
+                      );
+                    });
+
+                    emitLog(
+                      'success',
+                      `[재발행] 키워드 "${post.keyword}" 새 원고 예약 완료 → ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`,
+                      post.user_id,
+                    );
+                  } else {
+                    emitLog(
+                      'warn',
+                      `[재발행] API 키를 찾을 수 없어 재발행을 건너뜁니다.`,
+                      post.user_id,
+                    );
+                  }
+                } catch (republishErr) {
                   emitLog(
-                    'success',
-                    `[재발행] 키워드 "${post.keyword}" 새 원고 예약 완료 → ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`,
-                    post.user_id,
-                  );
-                } else {
-                  emitLog(
-                    'warn',
-                    `[재발행] API 키를 찾을 수 없어 재발행을 건너뜁니다.`,
+                    'error',
+                    `[재발행] 새 원고 생성 실패: ${republishErr.message}`,
                     post.user_id,
                   );
                 }
-              } catch (republishErr) {
-                emitLog(
-                  'error',
-                  `[재발행] 새 원고 생성 실패: ${republishErr.message}`,
-                  post.user_id,
-                );
               }
+            } else {
+              db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
+              emitLog('error', `예약 포스팅 실패: ${postResult.message}`, post.user_id);
             }
-          } else {
+          } catch (error) {
             db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
-            emitLog('error', `예약 포스팅 실패: ${postResult.message}`, post.user_id);
+            emitLog('error', `예약 발행 중 오류 발생: ${error.message}`, post.user_id);
+          } finally {
+            activeWorkers--;
+            emitTaskStatus();
           }
-        } catch (error) {
-          db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
-          emitLog('error', `예약 발행 중 오류 발생: ${error.message}`, post.user_id);
-        } finally {
-          activeWorkers--;
-          emitTaskStatus();
         }
-      }
-    },
-  );
+      },
+    );
+  } catch (err) {
+    emitLog('error', `스케줄러 작업 처리 중 치명적 오류: ${err.message}`);
+  }
 }

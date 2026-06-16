@@ -7,6 +7,7 @@ import db from '../db/database.js';
 import { validateBody } from '../middleware/validate.js';
 import { generateContent, generateTagsWithGemini } from '../services/ai-service.js';
 import { postToNaver } from '../services/naver-service.js';
+import { searchPexelsImages } from '../services/pexels-service.js';
 import {
   emitLog,
   getAvailableAccount,
@@ -213,9 +214,25 @@ async function resolveGeminiApiKey(userId, token) {
   });
 }
 
+// GET /pexels/search (픽셀스 이미지 검색)
+router.get('/pexels/search', async (req, res) => {
+  const { query, per_page = 4 } = req.query;
+  try {
+    const pexelsApiKey = await getSettingFromDB(req.user.id, 'pexels_api_key');
+    if (!pexelsApiKey || pexelsApiKey === 'YOUR_KEY_HERE') {
+      return res.json([]);
+    }
+    const images = await searchPexelsImages(pexelsApiKey, query, Number(per_page));
+    res.json(images);
+  } catch (error) {
+    console.error('[Pexels] Manual search route failed:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST /generate  (원고 생성)
 router.post('/generate', async (req, res) => {
-  const { keyword, engine = 'gemini' } = req.body;
+  const { keyword, title, engine = 'gemini' } = req.body;
   if (!keyword) return res.status(400).json({ error: '키워드를 입력해주세요.' });
 
   try {
@@ -235,7 +252,7 @@ router.post('/generate', async (req, res) => {
       aiConfig = { apiKey, model };
     }
 
-    const content = await generateContent(engine, aiConfig, keyword);
+    const content = await generateContent(engine, aiConfig, keyword, title);
 
     // AI 이미지 생성 복구 (Gemini API 키가 있을 경우)
     let imageUrl = '';
@@ -264,7 +281,18 @@ router.post('/generate', async (req, res) => {
       }
     }
 
-    res.json({ ...content, imageUrl });
+    // 픽셀스 이미지 자동 검색
+    let pexelsImages = [];
+    const pexelsApiKey = await getSettingFromDB(req.user.id, 'pexels_api_key');
+    if (pexelsApiKey && pexelsApiKey !== 'YOUR_KEY_HERE') {
+      try {
+        pexelsImages = await searchPexelsImages(pexelsApiKey, keyword, 4);
+      } catch (pexelsErr) {
+        console.error('[Pexels] Auto search failed during /generate:', pexelsErr.message);
+      }
+    }
+
+    res.json({ ...content, imageUrl, pexelsImages });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -435,6 +463,7 @@ router.post('/posts/schedule', validateBody(schedulePostSchema), (req, res) => {
     scheduled_at,
     headless,
     post_type = 'manual',
+    tags,
   } = req.body;
 
   // 1분 ~ 2분 사이의 랜덤한 오차(60,000ms ~ 120,000ms) 추가 적용
@@ -446,7 +475,7 @@ router.post('/posts/schedule', validateBody(schedulePostSchema), (req, res) => {
 
   const status = finalScheduledAt ? 'scheduled' : 'pending';
   const sql =
-    'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
   db.run(
     sql,
     [
@@ -459,6 +488,7 @@ router.post('/posts/schedule', validateBody(schedulePostSchema), (req, res) => {
       finalScheduledAt || null,
       status,
       post_type,
+      tags || null,
     ],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
@@ -548,9 +578,38 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
           repImgList = repImages;
         }
 
-        const contentImg =
-          contentImages.length > 0 ? contentImages[i % contentImages.length] : null;
-        const contentImgList = contentImg ? [contentImg] : [];
+        let contentImgList = [];
+        if (contentImages.length > 0) {
+          const contentImg = contentImages[i % contentImages.length];
+          contentImgList = contentImg ? [contentImg] : [];
+        } else {
+          // Pexels API 키가 설정되어 있으면 해당 키워드로 이미지 4장을 검색해 본문 이미지로 자동 삽입
+          const pexelsApiKey = await getSettingFromDB(req.user.id, 'pexels_api_key');
+          if (pexelsApiKey && pexelsApiKey !== 'YOUR_KEY_HERE') {
+            try {
+              emitLog(
+                'info',
+                `[Pexels] 키워드 "${keyword}"에 대한 이미지를 픽셀스에서 검색 중...`,
+                req.user.id,
+              );
+              const pexelsSearchUrls = await searchPexelsImages(pexelsApiKey, keyword, 4);
+              if (pexelsSearchUrls && pexelsSearchUrls.length > 0) {
+                contentImgList = pexelsSearchUrls;
+                emitLog(
+                  'success',
+                  `[Pexels] 이미지 ${pexelsSearchUrls.length}장을 수집하여 본문에 자동 매칭했습니다.`,
+                  req.user.id,
+                );
+              }
+            } catch (pexelsErr) {
+              emitLog(
+                'warn',
+                `[Pexels] 이미지 검색 실패: ${pexelsErr.message}. 이미지 없이 진행합니다.`,
+                req.user.id,
+              );
+            }
+          }
+        }
 
         const finalImageUrl = JSON.stringify({
           representative: repImgList,
@@ -740,7 +799,7 @@ router.post('/posts/:id/publish-now', (req, res) => {
 
 // POST /post (즉시 발행)
 router.post('/post', validateBody(createPostSchema), async (req, res) => {
-  const { account_id, title, content, image_url, headless } = req.body;
+  const { account_id, title, content, image_url, headless, tags } = req.body;
 
   try {
     if (!getSchedulerStatus().isRunning) {
@@ -771,14 +830,23 @@ router.post('/post', validateBody(createPostSchema), async (req, res) => {
     const decryptedAccount = { ...account, naver_pw: decrypt(account.naver_pw) };
     const result = await postToNaver(
       decryptedAccount,
-      { title, content, image_url, user_id: req.user.id },
+      { title, content, image_url, user_id: req.user.id, tags },
       { headless },
     );
 
     const status = result.success ? 'published' : 'failed';
     db.run(
-      "INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)",
-      [req.user.id, account.id, title, content, image_url || null, headless ? 1 : 0, status],
+      "INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, tags) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)",
+      [
+        req.user.id,
+        account.id,
+        title,
+        content,
+        image_url || null,
+        headless ? 1 : 0,
+        status,
+        tags || null,
+      ],
     );
 
     if (result.success) {

@@ -390,6 +390,83 @@ async function removeStrikethrough(page) {
 }
 
 /**
+ * [Helper] 제목과 본문 내용에서 빈도수가 높은 명사/단어 5개를 추출하여 태그 문자열로 반환
+ */
+function extractTagsFromContent(title, content) {
+  const text = `${title || ''} ${content || ''}`;
+  // 한글/영문/숫자 단어만 추출 (2글자 이상)
+  const words = text.match(/[가-힣a-zA-Z0-9]{2,10}/g) || [];
+
+  // 의미가 적거나 자주 쓰이는 조사/부사 등 필터링을 위한 불용어 사전
+  const stopWords = new Set([
+    '오늘',
+    '이번',
+    '정말',
+    '너무',
+    '진짜',
+    '아주',
+    '매우',
+    '그냥',
+    '그리고',
+    '하지만',
+    '그래서',
+    '때문',
+    '통해',
+    '함께',
+    '직접',
+    '다양한',
+    '추천',
+    '소개',
+    '방법',
+    '정보',
+    '이후',
+    '지금',
+    '다시',
+    '자주',
+    '하루',
+    '하루종일',
+    '생각',
+    '준비',
+    '시작',
+    '이용',
+    '사용',
+    '경우',
+    '정도',
+    '이름',
+    '모습',
+    '시간',
+    '하루',
+    '우리',
+    '너의',
+    '그들의',
+    '그것',
+    '이것',
+    '저것',
+    '하나',
+    '두개',
+    '세개',
+    '가지',
+    '블로그',
+    '포스팅',
+    '네이버',
+  ]);
+
+  const freq = {};
+  for (const word of words) {
+    const lowerWord = word.toLowerCase();
+    if (stopWords.has(lowerWord)) continue;
+    freq[lowerWord] = (freq[lowerWord] || 0) + 1;
+  }
+
+  // 빈도수 높은 단어 상위 5개 정렬 및 추출
+  const sorted = Object.keys(freq).sort((a, b) => freq[b] - freq[a]);
+  const extracted = sorted.slice(0, 5);
+
+  console.log(`[Tag Extractor] Extracted tags based on frequency: ${extracted.join(', ')}`);
+  return extracted.join(', ');
+}
+
+/**
  * [Helper] 태그 입력
  */
 async function inputTags(page, tags) {
@@ -408,10 +485,17 @@ async function inputTags(page, tags) {
     await tagInput.waitFor({ state: 'visible', timeout: 5000 });
 
     for (const tag of tagList) {
-      await tagInput.fill(tag);
+      await tagInput.click();
+      await page.waitForTimeout(150);
+      // 순수하게 태그 단어만 입력합니다.
+      await tagInput.pressSequentially(tag, { delay: 50 });
+      await page.waitForTimeout(150);
+      // 스페이스바를 입력하여 단어 조합을 끝내고 태그로 확정합니다.
+      await tagInput.press('Space');
       await page.waitForTimeout(100);
-      await page.keyboard.press('Space');
-      await page.waitForTimeout(200); // 태그 입력 대기
+      // 엔터(Enter) 키도 추가로 입력하여 완벽하게 태그 칩으로 등록 처리합니다.
+      await tagInput.press('Enter');
+      await page.waitForTimeout(300); // 태그가 칩 형태로 등록 완료될 때까지 안전 대기
     }
     console.log('Tags input completed.');
   } catch (e) {
@@ -578,201 +662,324 @@ async function installPlaywrightChromium() {
  * @param {object} post 포스팅 내용 (title, content, image_url)
  * @param {object} options 실행 옵션 (headless, onProgress)
  */
-export async function postToNaver(account, post, options = {}) {
-  let browser;
-  const { onProgress } = options;
+/**
+ * [Helper] 설정된 대표 이미지 풀(Pool)에서 순환하며 다음 대표 이미지를 반환합니다.
+ */
+async function getNextRepresentativeImage(userId) {
+  return new Promise((resolve) => {
+    db.get(
+      "SELECT value FROM settings WHERE user_id = ? AND key = 'representative_images'",
+      [userId],
+      async (err, row) => {
+        if (err || !row || !row.value) return resolve(null);
 
-  try {
-    let effectiveHeadless =
-      typeof options.headless === 'boolean' ? options.headless : CONFIG.HEADLESS;
-
-    // 개발 환경일 경우에는 디버깅하기 쉽게 헤드리스 모드를 해제하고 브라우저 창을 표시합니다.
-    // 단, 스케줄러를 통한 예약 발행이거나 명시적으로 headless가 true인 경우에는 개발 환경이더라도 헤드리스로 작동할 수 있도록 합니다.
-    if (process.env.NODE_ENV === 'development') {
-      if (options.isScheduler || options.headless === true) {
-        effectiveHeadless = true;
-      } else {
-        console.log('[Dev Mode] Auto-disabling headless mode to display browser window.');
-        effectiveHeadless = false;
-      }
-    }
-
-    if (onProgress) onProgress('info', '브라우저를 실행하는 중...');
-
-    try {
-      browser = await chromium.launch({
-        headless: effectiveHeadless,
-        args: [
-          '--disable-blink-features=AutomationControlled',
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-        ],
-      });
-    } catch (launchError) {
-      if (
-        launchError?.message?.includes("Executable doesn't exist") ||
-        launchError?.message?.includes('looks like Playwright was upgraded')
-      ) {
-        if (onProgress) onProgress('info', '브라우저 엔진 설치 시도 중...');
-        console.log(
-          'Chromium launch failed. Attempting to install Playwright Chromium automatically...',
-        );
+        let images = [];
         try {
-          await installPlaywrightChromium();
-          // 브라우저 다시 시작 시도
-          browser = await chromium.launch({
-            headless: effectiveHeadless,
-            args: [
-              '--disable-blink-features=AutomationControlled',
-              '--no-sandbox',
-              '--disable-setuid-sandbox',
-            ],
-          });
-        } catch (installErr) {
-          console.error('Failed to automatically install Playwright Chromium:', installErr);
-          return {
-            success: false,
-            message: `Playwright 브라우저 자동 설치에 실패했습니다. (에러: ${installErr.message}). 프로그램 재시작 또는 인터넷 연결 확인을 해주세요.`,
-          };
+          images = JSON.parse(row.value);
+        } catch {
+          return resolve(null);
         }
-      } else {
-        throw launchError;
-      }
-    }
 
-    const context = await browser.newContext({
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      viewport: { width: 1280, height: 800 },
-      locale: 'ko-KR',
-      timezoneId: 'Asia/Seoul',
-    });
+        if (!Array.isArray(images) || images.length === 0) return resolve(null);
+        if (images.length === 1) return resolve(images[0]);
 
-    const page = await context.newPage();
-
-    // 1. 로그인
-    if (onProgress) onProgress('info', '네이버 로그인 시도 중...');
-    await loginToNaver(page, account);
-
-    // 2. 글쓰기 에디터 진입
-    if (onProgress) onProgress('info', '블로그 글쓰기 페이지 진입 중...');
-    console.log(`Navigating to blog write page for ${account.naver_id}...`);
-    await page.goto(`https://blog.naver.com/${account.naver_id}/postwrite`, {
-      waitUntil: 'domcontentloaded',
-    });
-
-    // 2-1. 흰 화면 버그(에디터 렌더링 실패) 방어 로직: 에디터 컨테이너가 5초 내에 안 뜨면 새로고침
-    try {
-      const editorWrap = page.locator('.se-documentTitle').first();
-      await editorWrap.waitFor({ state: 'visible', timeout: 5000 });
-      console.log('Editor loaded successfully on first try.');
-    } catch (_e) {
-      console.warn('Blank screen detected or editor failed to render. Triggering page reload...');
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      // 리로드 후 에디터가 뜰 때까지 조금 더 기다려줍니다.
-      await page.waitForTimeout(3000);
-    }
-
-    // 3. 에디터 팝업 정리
-    if (onProgress) onProgress('info', '에디터 방해 팝업 제거 중...');
-    await closeEditorPopups(page);
-
-    // 4. 제목 입력
-    if (onProgress) onProgress('info', '제목 작성 중...');
-    await fillEditorTitle(page, post.title);
-
-    // Parse image_url for multiple images JSON support
-    let representativeImages = [];
-    let contentImages = [];
-    if (post.image_url) {
-      try {
-        const parsed = JSON.parse(post.image_url);
-        if (parsed && typeof parsed === 'object') {
-          representativeImages = parsed.representative || [];
-          contentImages = parsed.content || [];
-        } else {
-          representativeImages = [post.image_url];
-        }
-      } catch {
-        representativeImages = [post.image_url];
-      }
-    }
-
-    // 5. 대표 이미지 업로드 (원본 그대로)
-    if (representativeImages.length > 0) {
-      if (onProgress)
-        onProgress('info', `대표 사진 업로드 중 (${representativeImages.length}개)...`);
-      for (const imgUrl of representativeImages) {
-        await uploadImageToEditor(page, imgUrl, false);
-      }
-    }
-
-    // 6. 본문 입력
-    if (onProgress) onProgress('info', '본문 내용 작성 중...');
-    await fillEditorContent(page, post.content);
-
-    // 7. 본문 하단 이미지 업로드 (AI 자동 변형)
-    if (contentImages.length > 0) {
-      if (onProgress)
-        onProgress('info', `본문 사진 업로드 중 (${contentImages.length}개, AI 자동 변조)...`);
-      for (const imgUrl of contentImages) {
-        await uploadImageToEditor(page, imgUrl, true);
-      }
-    } else {
-      // 본문 이미지가 없을 경우 AI 이미지 생성 시도
-      try {
-        if (onProgress) onProgress('info', '본문 사진이 없어 AI에게 생성 요청 중...');
-
-        let apiKey = null;
-        await new Promise((resolve) => {
+        const rotation = await new Promise((resRot) => {
           db.get(
-            "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
-            [post.user_id || null],
-            (err, row) => {
-              if (!err && row && row.value) {
-                try {
-                  apiKey = decrypt(row.value);
-                } catch {}
-              }
-              resolve();
-            },
+            "SELECT value FROM settings WHERE user_id = ? AND key = 'representative_image_rotation'",
+            [userId],
+            (_, rRow) => resRot(rRow ? rRow.value : 'sequential'),
           );
         });
 
-        if (apiKey && apiKey !== 'YOUR_KEY_HERE') {
-          const base64Image = await generateImageWithGemini(
-            apiKey,
-            post.keyword || post.title,
-            post.title,
-            post.content,
+        const lastUsed = await new Promise((resLast) => {
+          db.get(
+            "SELECT value FROM settings WHERE user_id = ? AND key = 'last_used_representative_image'",
+            [userId],
+            (_, lRow) => resLast(lRow ? lRow.value : null),
           );
-          if (base64Image) {
-            const tempImgPath = path.join(os.tmpdir(), `ai_gen_${Date.now()}.png`);
-            fs.writeFileSync(tempImgPath, Buffer.from(base64Image, 'base64'));
-            if (onProgress) onProgress('info', 'AI 사진이 생성되어 업로드합니다...');
-            await uploadImageToEditor(page, tempImgPath, true);
-            if (fs.existsSync(tempImgPath)) {
-              fs.unlinkSync(tempImgPath);
+        });
+
+        let selected = null;
+        if (rotation === 'random') {
+          const candidates = images.filter((img) => img !== lastUsed);
+          selected = candidates[Math.floor(Math.random() * candidates.length)];
+        } else {
+          let nextIndex = 0;
+          if (lastUsed) {
+            const lastIndex = images.indexOf(lastUsed);
+            if (lastIndex !== -1) {
+              nextIndex = (lastIndex + 1) % images.length;
             }
           }
+          selected = images[nextIndex];
         }
-      } catch (e) {
-        console.warn('AI image generation failed:', e.message);
+
+        if (selected) {
+          db.run(
+            "INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'last_used_representative_image', ?)",
+            [userId, selected],
+          );
+        }
+        resolve(selected);
+      },
+    );
+  });
+}
+
+/**
+ * 네이버 블로그 포스팅 메인 함수
+ * @param {object} account 네이버 계정 정보 (naver_id, naver_pw)
+ * @param {object} post 포스팅 내용 (title, content, image_url)
+ * @param {object} options 실행 옵션 (headless, onProgress)
+ */
+export async function postToNaver(account, post, options = {}) {
+  let browser;
+  let postTimeoutId;
+  const { onProgress } = options;
+
+  // 태그가 비어있거나 누락되었을 경우 본문에서 5개 태그 자동 추출
+  if (!post.tags || post.tags.trim() === '') {
+    post.tags = extractTagsFromContent(post.title, post.content);
+    if (onProgress && post.tags) {
+      onProgress(
+        'info',
+        `[태그 자동 생성] 본문과 관련된 단어 5개를 태그로 자동 적용했습니다: ${post.tags}`,
+      );
+    }
+  }
+
+  try {
+    const mainAction = async () => {
+      let effectiveHeadless =
+        typeof options.headless === 'boolean' ? options.headless : CONFIG.HEADLESS;
+
+      // 개발 환경일 경우에는 디버깅 및 시각적 모니터링이 쉽도록 스케줄러 여부와 관계없이 브라우저 창을 무조건 표시합니다.
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Dev Mode] Auto-disabling headless mode to display browser window.');
+        effectiveHeadless = false;
+      }
+
+      if (onProgress) onProgress('info', '브라우저를 실행하는 중...');
+
+      try {
+        browser = await chromium.launch({
+          headless: effectiveHeadless,
+          args: [
+            '--disable-blink-features=AutomationControlled',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+          ],
+        });
+      } catch (launchError) {
+        if (
+          launchError?.message?.includes("Executable doesn't exist") ||
+          launchError?.message?.includes('looks like Playwright was upgraded')
+        ) {
+          if (onProgress) onProgress('info', '브라우저 엔진 설치 시도 중...');
+          console.log(
+            'Chromium launch failed. Attempting to install Playwright Chromium automatically...',
+          );
+          try {
+            await installPlaywrightChromium();
+            // 브라우저 다시 시작 시도
+            browser = await chromium.launch({
+              headless: effectiveHeadless,
+              args: [
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+              ],
+            });
+          } catch (installErr) {
+            console.error('Failed to automatically install Playwright Chromium:', installErr);
+            throw new Error(
+              `Playwright 브라우저 자동 설치에 실패했습니다. (에러: ${installErr.message}). 프로그램 재시작 또는 인터넷 연결 확인을 해주세요.`,
+            );
+          }
+        } else {
+          throw launchError;
+        }
+      }
+
+      const context = await browser.newContext({
+        userAgent:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        viewport: { width: 1280, height: 800 },
+        locale: 'ko-KR',
+        timezoneId: 'Asia/Seoul',
+      });
+
+      const page = await context.newPage();
+
+      // 1. 로그인
+      if (onProgress) onProgress('info', '네이버 로그인 시도 중...');
+      await loginToNaver(page, account);
+
+      // 2. 글쓰기 에디터 진입
+      if (onProgress) onProgress('info', '블로그 글쓰기 페이지 진입 중...');
+      console.log(`Navigating to blog write page for ${account.naver_id}...`);
+      await page.goto(`https://blog.naver.com/${account.naver_id}/postwrite`, {
+        waitUntil: 'domcontentloaded',
+      });
+
+      // 2-1. 흰 화면 버그(에디터 렌더링 실패) 방어 로직: 에디터 컨테이너가 5초 내에 안 뜨면 새로고침
+      try {
+        const editorWrap = page.locator('.se-documentTitle').first();
+        await editorWrap.waitFor({ state: 'visible', timeout: 5000 });
+        console.log('Editor loaded successfully on first try.');
+      } catch (_e) {
+        console.warn('Blank screen detected or editor failed to render. Triggering page reload...');
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        // 리로드 후 에디터가 뜰 때까지 조금 더 기다려줍니다.
+        await page.waitForTimeout(3000);
+      }
+
+      // 3. 에디터 팝업 정리
+      if (onProgress) onProgress('info', '에디터 방해 팝업 제거 중...');
+      await closeEditorPopups(page);
+
+      // 4. 제목 입력
+      if (onProgress) onProgress('info', '제목 작성 중...');
+      await fillEditorTitle(page, post.title);
+
+      // Parse image_url for multiple images JSON support
+      let representativeImages = [];
+      let contentImages = [];
+      if (post.image_url) {
+        try {
+          const parsed = JSON.parse(post.image_url);
+          if (parsed && typeof parsed === 'object') {
+            representativeImages = parsed.representative || [];
+            contentImages = parsed.content || [];
+          } else {
+            representativeImages = [post.image_url];
+          }
+        } catch {
+          representativeImages = [post.image_url];
+        }
+      }
+
+      // 대표 이미지가 비어있는 경우 순환 이미지 풀에서 가져오기 적용
+      if (representativeImages.length === 0) {
+        const nextRepImage = await getNextRepresentativeImage(post.user_id);
+        if (nextRepImage) {
+          representativeImages = [nextRepImage];
+          if (onProgress)
+            onProgress('info', '설정된 대표 이미지 풀에서 이미지를 매칭하여 자동 적용했습니다.');
+        }
+      }
+
+      // 5. 대표 이미지 업로드 (원본 그대로)
+      if (representativeImages.length > 0) {
+        if (onProgress)
+          onProgress('info', `대표 사진 업로드 중 (${representativeImages.length}개)...`);
+        for (const imgUrl of representativeImages) {
+          await uploadImageToEditor(page, imgUrl, false);
+        }
+      }
+
+      // 6. 본문 입력
+      if (onProgress) onProgress('info', '본문 내용 작성 중...');
+      await fillEditorContent(page, post.content);
+
+      // 7. 본문 하단 이미지 업로드 (AI 자동 변형)
+      if (contentImages.length > 0) {
+        if (onProgress)
+          onProgress('info', `본문 사진 업로드 중 (${contentImages.length}개, AI 자동 변조)...`);
+        for (const imgUrl of contentImages) {
+          await uploadImageToEditor(page, imgUrl, true);
+        }
+      } else {
+        // 본문 이미지가 없을 경우 AI 이미지 생성 시도
+        try {
+          if (onProgress) onProgress('info', '본문 사진이 없어 AI에게 생성 요청 중...');
+
+          let apiKey = null;
+          await new Promise((resolve) => {
+            db.get(
+              "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
+              [post.user_id || null],
+              (err, row) => {
+                if (!err && row && row.value) {
+                  try {
+                    apiKey = decrypt(row.value);
+                  } catch {}
+                }
+                resolve();
+              },
+            );
+          });
+
+          if (apiKey && apiKey !== 'YOUR_KEY_HERE') {
+            const base64Image = await generateImageWithGemini(
+              apiKey,
+              post.keyword || post.title,
+              post.title,
+              post.content,
+            );
+            if (base64Image) {
+              const tempImgPath = path.join(os.tmpdir(), `ai_gen_${Date.now()}.png`);
+              fs.writeFileSync(tempImgPath, Buffer.from(base64Image, 'base64'));
+              if (onProgress) onProgress('info', 'AI 사진이 생성되어 업로드합니다...');
+              await uploadImageToEditor(page, tempImgPath, true);
+              if (fs.existsSync(tempImgPath)) {
+                fs.unlinkSync(tempImgPath);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('AI image generation failed:', e.message);
+        }
+      }
+
+      // 7. 의도치 않은 서식 제거
+      await removeStrikethrough(page);
+
+      // 8. 발행 처리
+      if (onProgress) onProgress('info', '최종 발행 프로세스 진행 중...');
+      await publishPostAction(page, post.tags);
+
+      return { success: true, message: 'Successfully posted to Naver Blog' };
+    };
+
+    // 3분 강제 타임아웃 레이스 조건 설정
+    const timeoutPromise = new Promise((_, reject) => {
+      postTimeoutId = setTimeout(() => {
+        reject(
+          new Error(
+            '전체 포스팅 타임아웃(3분 초과). 좀비 프로세스 방지를 위해 브라우저를 강제 종료합니다.',
+          ),
+        );
+      }, 180000);
+    });
+
+    const result = await Promise.race([mainAction(), timeoutPromise]);
+    return result;
+  } catch (error) {
+    console.error('Naver posting error:', error);
+
+    // 자동 로그인 실패 시 해당 계정의 status를 paused로 변경하여 무한 차단 방지
+    if (error.message?.includes('자동 로그인 실패')) {
+      try {
+        db.run("UPDATE accounts SET status = 'paused' WHERE naver_id = ? AND user_id = ?", [
+          account.naver_id,
+          post.user_id,
+        ]);
+        if (onProgress)
+          onProgress(
+            'warn',
+            `[계정 일시정지] 로그인 에러 감지로 계정(${account.naver_id})을 일시정지 처리했습니다.`,
+          );
+      } catch (dbErr) {
+        console.error('Failed to update account status to paused:', dbErr.message);
       }
     }
 
-    // 7. 의도치 않은 서식 제거
-    await removeStrikethrough(page);
-
-    // 8. 발행 처리
-    if (onProgress) onProgress('info', '최종 발행 프로세스 진행 중...');
-    await publishPostAction(page, post.tags);
-
-    return { success: true, message: 'Successfully posted to Naver Blog' };
-  } catch (error) {
-    console.error('Naver posting error:', error);
     return { success: false, message: error.message };
   } finally {
+    if (postTimeoutId) {
+      clearTimeout(postTimeoutId);
+    }
     if (browser) {
       await browser.close();
     }
