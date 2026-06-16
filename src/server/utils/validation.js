@@ -22,9 +22,12 @@ export const schedulePostSchema = z.object({
   tags: z.string().optional(),
   headless: z.boolean().optional(),
   account_id: z.number().nullable().optional(),
-  scheduled_at: z.string().refine((val) => !Number.isNaN(Date.parse(val)), {
-    message: '올바른 날짜 형식이 아닙니다.',
-  }),
+  scheduled_at: z
+    .string()
+    .refine((val) => !Number.isNaN(Date.parse(val)), {
+      message: '올바른 날짜 형식이 아닙니다.',
+    })
+    .optional(),
 });
 
 /**

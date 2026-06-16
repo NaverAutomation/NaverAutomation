@@ -27,21 +27,23 @@ async function loginToNaver(page, account) {
   await page.goto('https://nid.naver.com/nidlogin.login', { waitUntil: 'domcontentloaded' });
 
   console.log('Entering ID/PW using anti-captcha evasion technique...');
+  await page.locator('#id').click();
   await page.evaluate((id) => {
     const el = document.querySelector('#id');
     if (el) {
-      el.value = id;
-      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.focus();
+      document.execCommand('insertText', false, id);
     }
   }, account.naver_id);
 
   await page.waitForTimeout(Math.random() * 200 + 100);
 
+  await page.locator('#pw').click();
   await page.evaluate((pw) => {
     const el = document.querySelector('#pw');
     if (el) {
-      el.value = pw;
-      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.focus();
+      document.execCommand('insertText', false, pw);
     }
   }, account.naver_pw);
 
@@ -113,6 +115,29 @@ async function loginToNaver(page, account) {
       );
     }
   }
+
+  // 로그인 성공 후 MyBlog.naver를 통한 진짜 블로그 ID 추출
+  console.log('Navigating to MyBlog.naver to resolve real blog ID...');
+  await page.goto('https://blog.naver.com/MyBlog.naver', { waitUntil: 'domcontentloaded' });
+
+  // 리다이렉트 대기 (MyBlog.naver에서 실제 블로그 주소로 리다이렉트 될 때까지)
+  let checkCount = 0;
+  while (page.url().includes('MyBlog.naver') && checkCount < 10) {
+    await page.waitForTimeout(500);
+    checkCount++;
+  }
+
+  const finalUrl = page.url();
+  console.log(`Resolved final blog URL: ${finalUrl}`);
+
+  const match = finalUrl.match(/(?:m\.)?blog\.naver\.com\/([a-zA-Z0-9_-]+)/);
+  if (!match?.[1]) {
+    throw new Error(`실제 블로그 ID를 추출하지 못했습니다. (최종 URL: ${finalUrl})`);
+  }
+
+  const realBlogId = match[1];
+  console.log(`Successfully resolved real blog ID: ${realBlogId}`);
+  return realBlogId;
 }
 
 /**
@@ -305,7 +330,7 @@ async function uploadImageToEditor(page, imageUrl, shouldMutate = false) {
       uploadPath = mutatedPath;
     }
 
-    const imageBtn = page.locator('button[data-name="image"]').first();
+    const imageBtn = page.locator('button.se-image-toolbar-button').first();
     await imageBtn.waitFor({ state: 'visible', timeout: 5000 });
 
     const [fileChooser] = await Promise.all([
@@ -813,14 +838,33 @@ export async function postToNaver(account, post, options = {}) {
 
       // 1. 로그인
       if (onProgress) onProgress('info', '네이버 로그인 시도 중...');
-      await loginToNaver(page, account);
+      const realBlogId = await loginToNaver(page, account);
 
       // 2. 글쓰기 에디터 진입
       if (onProgress) onProgress('info', '블로그 글쓰기 페이지 진입 중...');
-      console.log(`Navigating to blog write page for ${account.naver_id}...`);
-      await page.goto(`https://blog.naver.com/${account.naver_id}/postwrite`, {
+      console.log(`Navigating to blog write page for ${realBlogId}...`);
+      await page.goto(`https://blog.naver.com/${realBlogId}?Redirect=Write`, {
         waitUntil: 'domcontentloaded',
       });
+
+      // 2-1. iframe 내부 주소 추출하여 다이렉트 이동 (탑레벨 에뮬레이션 호환 및 봇 감지 회피)
+      try {
+        const mainFrame = page.locator('#mainFrame');
+        await mainFrame.waitFor({ state: 'attached', timeout: 5000 });
+        const iframeSrc = await mainFrame.getAttribute('src');
+        if (iframeSrc) {
+          const absoluteIframeUrl = iframeSrc.startsWith('http')
+            ? iframeSrc
+            : `https://blog.naver.com${iframeSrc}`;
+          console.log(`Navigating directly to editor iframe URL: ${absoluteIframeUrl}`);
+          await page.goto(absoluteIframeUrl, { waitUntil: 'domcontentloaded' });
+        }
+      } catch (iframeErr) {
+        console.warn(
+          'Failed to resolve iframe src, trying to proceed with current URL...',
+          iframeErr.message,
+        );
+      }
 
       // 2-1. 흰 화면 버그(에디터 렌더링 실패) 방어 로직: 에디터 컨테이너가 5초 내에 안 뜨면 새로고침
       try {
