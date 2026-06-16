@@ -365,12 +365,6 @@ export async function processScheduledPosts() {
                         `[재발행] 키워드 "${post.keyword}" 새 원고 예약 완료 (${currentCount + 1}/5회) → ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`,
                         post.user_id,
                       );
-                    } else {
-                      emitLog(
-                        'warn',
-                        `[재발행] API 키를 찾을 수 없어 재발행을 건너뜁니다.`,
-                        post.user_id,
-                      );
                     }
                   }
                 } catch (republishErr) {
