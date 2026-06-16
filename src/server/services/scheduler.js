@@ -280,87 +280,98 @@ export async function processScheduledPosts() {
               // ── 재발행 체인: 동일 키워드로 새 원고 생성 후 다음 예약 등록 ──
               if (post.republish_interval_ms && post.keyword && post.post_type === 'keyword') {
                 try {
-                  const nextScheduledAt = new Date(
-                    Date.now() + post.republish_interval_ms,
-                  ).toISOString();
-                  emitLog(
-                    'info',
-                    `[재발행] 키워드 "${post.keyword}" 새 원고 생성 중... 다음 발행: ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`,
-                    post.user_id,
-                  );
-
-                  // Gemini API 키 조회
-                  const apiKey = await new Promise((resolve) => {
-                    db.get(
-                      "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
-                      [post.user_id],
-                      (err, row) => {
-                        if (err || !row || !row.value) return resolve(null);
-                        try {
-                          resolve(decrypt(row.value));
-                        } catch {
-                          resolve(null);
-                        }
-                      },
+                  const currentCount = post.republish_count || 1;
+                  if (currentCount >= 5) {
+                    emitLog(
+                      'info',
+                      `[재발행] 키워드 "${post.keyword}"의 최대 재발행 제한(5회)에 도달하여 재발행 체인을 종료합니다.`,
+                      post.user_id,
                     );
-                  });
+                  } else {
+                    const nextScheduledAt = new Date(
+                      Date.now() + post.republish_interval_ms,
+                    ).toISOString();
+                    emitLog(
+                      'info',
+                      `[재발행] 키워드 "${post.keyword}" 새 원고 생성 중... (${currentCount + 1}/5회) 다음 발행: ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`,
+                      post.user_id,
+                    );
 
-                  if (apiKey) {
-                    const geminiModel = await new Promise((resolve) => {
+                    // Gemini API 키 조회
+                    const apiKey = await new Promise((resolve) => {
                       db.get(
-                        "SELECT value FROM settings WHERE user_id = ? AND key = 'gemini_model'",
+                        "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
                         [post.user_id],
-                        (_err, row) => resolve(row ? row.value : 'auto'),
-                      );
-                    });
-
-                    const newContent = await generateContent(
-                      'gemini',
-                      { apiKey, model: geminiModel },
-                      post.keyword,
-                    );
-                    const newTags = await generateTagsWithGemini(
-                      apiKey,
-                      post.keyword,
-                      newContent.title,
-                      newContent.content,
-                    );
-
-                    await new Promise((resolve, reject) => {
-                      db.run(
-                        'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, republish_interval_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                        [
-                          post.user_id,
-                          null, // 라운드로빈 사용
-                          newContent.title,
-                          newContent.content,
-                          post.image_url,
-                          post.headless,
-                          nextScheduledAt,
-                          'scheduled',
-                          'keyword',
-                          post.keyword,
-                          newTags,
-                          post.republish_interval_ms,
-                        ],
-                        (err) => {
-                          if (err) reject(err);
-                          else resolve();
+                        (err, row) => {
+                          if (err || !row || !row.value) return resolve(null);
+                          try {
+                            resolve(decrypt(row.value));
+                          } catch {
+                            resolve(null);
+                          }
                         },
                       );
                     });
 
-                    emitLog(
-                      'success',
-                      `[재발행] 키워드 "${post.keyword}" 새 원고 예약 완료 → ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`,
-                      post.user_id,
-                    );
-                  } else {
-                    emitLog(
-                      'warn',
-                      `[재발행] API 키를 찾을 수 없어 재발행을 건너뜁니다.`,
-                      post.user_id,
-                    );
+                    if (apiKey) {
+                      const geminiModel = await new Promise((resolve) => {
+                        db.get(
+                          "SELECT value FROM settings WHERE user_id = ? AND key = 'gemini_model'",
+                          [post.user_id],
+                          (_err, row) => resolve(row ? row.value : 'auto'),
+                        );
+                      });
+
+                      const newContent = await generateContent(
+                        'gemini',
+                        { apiKey, model: geminiModel },
+                        post.keyword,
+                      );
+                      const newTags = await generateTagsWithGemini(
+                        apiKey,
+                        post.keyword,
+                        newContent.title,
+                        newContent.content,
+                      );
+
+                      await new Promise((resolve, reject) => {
+                        db.run(
+                          'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, republish_interval_ms, campaign_id, republish_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                          [
+                            post.user_id,
+                            null, // 라운드로빈 사용
+                            newContent.title,
+                            newContent.content,
+                            post.image_url,
+                            post.headless,
+                            nextScheduledAt,
+                            'scheduled',
+                            'keyword',
+                            post.keyword,
+                            newTags,
+                            post.republish_interval_ms,
+                            post.campaign_id || null,
+                            currentCount + 1,
+                          ],
+                          (err) => {
+                            if (err) reject(err);
+                            else resolve();
+                          },
+                        );
+                      });
+
+                      emitLog(
+                        'success',
+                        `[재발행] 키워드 "${post.keyword}" 새 원고 예약 완료 (${currentCount + 1}/5회) → ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`,
+                        post.user_id,
+                      );
+                    } else {
+                      emitLog(
+                        'warn',
+                        `[재발행] API 키를 찾을 수 없어 재발행을 건너뜁니다.`,
+                        post.user_id,
+                      );
+                    }
                   }
                 } catch (republishErr) {
                   emitLog(

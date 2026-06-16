@@ -700,7 +700,7 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
 
         await new Promise((resolve, reject) => {
           const sql =
-            'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, republish_interval_ms, campaign_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+            'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, republish_interval_ms, campaign_id, republish_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
           db.run(
             sql,
             [
@@ -717,6 +717,7 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
               generatedTags,
               intervalMs > 0 ? intervalMs : null,
               campaignId,
+              1,
             ],
             function (err) {
               if (err) reject(err);

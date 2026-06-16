@@ -74,6 +74,7 @@ function initializeDatabase() {
           addColumnIfNotExists('posts', 'keyword', 'TEXT');
           addColumnIfNotExists('posts', 'tags', 'TEXT');
           addColumnIfNotExists('posts', 'republish_interval_ms', 'INTEGER');
+          addColumnIfNotExists('posts', 'republish_count', 'INTEGER DEFAULT 0');
         }
       },
     );

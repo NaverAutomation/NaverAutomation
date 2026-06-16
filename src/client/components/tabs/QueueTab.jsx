@@ -31,6 +31,59 @@ const getThumbnail = (imageUrlStr) => {
   return null;
 };
 
+// ── 미려한 인라인 SVG 아이콘 컴포넌트 ──
+const SuccessIcon = () => (
+  <svg
+    className="w-3.5 h-3.5 text-success shrink-0"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={3}
+  >
+    <title>발행 완료</title>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+const PendingIcon = () => (
+  <svg
+    className="w-3.5 h-3.5 text-base-content/20 shrink-0 animate-pulse"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={3}
+  >
+    <title>예약 대기</title>
+    <circle cx="12" cy="12" r="9" strokeDasharray="3 3" />
+  </svg>
+);
+
+const renderProgressIcons = (publishedCount = 0, activeCount = 0) => {
+  const totalSlots = 5;
+  const icons = [];
+
+  // 성공한 개수만큼 SuccessIcon 추가
+  const successCount = Math.min(publishedCount, totalSlots);
+  for (let i = 0; i < successCount; i++) {
+    icons.push(<SuccessIcon key={`success-${i}`} />);
+  }
+
+  // 남은 슬롯만큼 PendingIcon 추가
+  const pendingCount = Math.max(0, totalSlots - successCount);
+  for (let i = 0; i < pendingCount; i++) {
+    icons.push(<PendingIcon key={`pending-${i}`} />);
+  }
+
+  return (
+    <div className="flex items-center gap-1 bg-base-200/60 px-2 py-0.5 rounded-md border border-base-300/40">
+      {icons}
+      <span className="text-[10px] font-bold text-base-content/60 ml-1">
+        {activeCount === 0 ? '완료' : '예약진행중'}
+      </span>
+    </div>
+  );
+};
+
 const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReusePost }) => {
   // ── 예약 수정 상태 ──
   const [editingPostId, setEditingPostId] = useState(null);
@@ -168,10 +221,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                          <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-2.5 py-0.5 rounded-md">
-                            {'V'.repeat(post.published_count) + 'ㅁ'.repeat(post.active_count)}
-                            {post.active_count === 0 ? '(완료)' : '(예약진행중)'}
-                          </span>
+                          {renderProgressIcons(post.published_count, post.active_count)}
                           <span className="badge badge-secondary badge-xs font-bold">
                             🔑 자동 키워드 일괄
                           </span>
