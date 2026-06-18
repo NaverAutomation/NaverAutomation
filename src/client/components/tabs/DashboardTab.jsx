@@ -7,7 +7,9 @@ const DashboardTab = React.memo(
     const [selectedPost, setSelectedPost] = useState(null);
     const [retrying, setRetrying] = useState(false);
     const [selectedIds, setSelectedIds] = useState([]);
-    const [currentTime, setCurrentTime] = useState(new Date());
+    const [currentTime, setCurrentTime] = useState(() => new Date());
+
+    const selectedIdsSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
     // ── 실시간 countdown 업데이트 타이머 ──
     useEffect(() => {
@@ -286,7 +288,7 @@ const DashboardTab = React.memo(
                         <input
                           type="checkbox"
                           className="checkbox checkbox-primary checkbox-sm cursor-pointer"
-                          checked={selectedIds.includes(p.id)}
+                          checked={selectedIdsSet.has(p.id)}
                           onChange={() => handleSelectToggle(p.id)}
                         />
                       </td>
