@@ -46,4 +46,5 @@ export const scheduleKeywordsSchema = z.object({
   engine: z.string().optional().default('gemini'),
   image_url: z.string().optional(),
   split_rep_images: z.boolean().optional(),
+  image_keywords: z.string().optional(),
 });

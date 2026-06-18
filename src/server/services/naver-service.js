@@ -7,6 +7,7 @@ import { chromium } from 'playwright';
 import { CONFIG } from '../config.js';
 import db from '../db/database.js';
 import { decrypt } from '../utils/crypto.js';
+import { getGlobalSetting } from '../utils/supabase.js';
 import { generateImageWithGemini } from './ai-service.js';
 
 /**
@@ -245,10 +246,15 @@ async function mutateImageViaCanvas(page, imagePath) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
 
-            // 1. Margins crop (4px)
+            // 1. Margins crop (4px) and resize to target width (900px)
             const cropPx = 4;
-            canvas.width = Math.max(10, img.width - cropPx * 2);
-            canvas.height = Math.max(10, img.height - cropPx * 2);
+            const originalWidth = img.width - cropPx * 2;
+            const originalHeight = img.height - cropPx * 2;
+
+            const targetWidth = 900;
+            const scale = targetWidth / Math.max(10, originalWidth);
+            canvas.width = targetWidth;
+            canvas.height = Math.round(originalHeight * scale);
 
             // 2. Rotate slightly (-0.5 to 0.5 deg)
             ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -259,8 +265,8 @@ async function mutateImageViaCanvas(page, imagePath) {
               img,
               cropPx,
               cropPx,
-              img.width - cropPx * 2,
-              img.height - cropPx * 2,
+              originalWidth,
+              originalHeight,
               -canvas.width / 2,
               -canvas.height / 2,
               canvas.width,
@@ -343,6 +349,32 @@ async function uploadImageToEditor(page, imageUrl, shouldMutate = false) {
 
     await page.waitForTimeout(4000);
     console.log('Image upload completed.');
+
+    // ──────────────── 이미지 레이아웃 가로 최대 (문서 너비) 설정 ────────────────
+    console.log('Applying "document width" formatting to the uploaded image...');
+    try {
+      const lastImage = page.locator('.se-image-container img, .se-module-image img').last();
+      if ((await lastImage.count()) > 0) {
+        await lastImage.click({ force: true });
+        await page.waitForTimeout(800); // 툴바 노출 애니메이션 대기
+
+        const sizeBtn = page
+          .locator('button[title="문서 너비"], button[title="문서너비"], button[title="옆트임"]')
+          .first();
+        if (await sizeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await sizeBtn.click({ force: true });
+          console.log('Successfully set image alignment to document width.');
+          await page.waitForTimeout(400); // 레이아웃 적용 완료 안전 대기
+        } else {
+          console.warn('Could not find the "Document Width" button in editor toolbar.');
+        }
+      } else {
+        console.warn('Could not find the uploaded image element in editor DOM.');
+      }
+    } catch (alignErr) {
+      console.warn('Failed to align image to document width:', alignErr.message);
+    }
+    // ───────────────────────────────────────────────────────────────────────────
   } catch (err) {
     console.error('Image upload failed:', err.message);
   } finally {
@@ -938,21 +970,24 @@ export async function postToNaver(account, post, options = {}) {
         try {
           if (onProgress) onProgress('info', '본문 사진이 없어 AI에게 생성 요청 중...');
 
-          let apiKey = null;
-          await new Promise((resolve) => {
-            db.get(
-              "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
-              [post.user_id || null],
-              (err, row) => {
-                if (!err && row && row.value) {
-                  try {
-                    apiKey = decrypt(row.value);
-                  } catch {}
-                }
-                resolve();
-              },
-            );
-          });
+          let apiKey = await getGlobalSetting('master_gemini_api_key');
+          if (!apiKey || apiKey === 'YOUR_KEY_HERE') {
+            apiKey = null;
+            await new Promise((resolve) => {
+              db.get(
+                "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
+                [post.user_id || null],
+                (err, row) => {
+                  if (!err && row && row.value) {
+                    try {
+                      apiKey = decrypt(row.value);
+                    } catch {}
+                  }
+                  resolve();
+                },
+              );
+            });
+          }
 
           if (apiKey && apiKey !== 'YOUR_KEY_HERE') {
             const base64Image = await generateImageWithGemini(

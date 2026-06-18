@@ -1,5 +1,6 @@
 import db from '../db/database.js';
 import { decrypt } from '../utils/crypto.js';
+import { getGlobalSetting } from '../utils/supabase.js';
 import { generateContent, generateTagsWithGemini } from './ai-service.js';
 import { postToNaver } from './naver-service.js';
 
@@ -110,7 +111,9 @@ export function startScheduler() {
   emitTaskStatus();
 
   // 서버 시작 시/스케줄러 시작 시 stuck processing posts 복구
-  db.run("UPDATE posts SET status = 'scheduled' WHERE status = 'processing'");
+  db.run("UPDATE posts SET status = 'scheduled' WHERE status = 'processing'", () => {
+    if (io) io.emit('posts-updated');
+  });
 
   // 즉시 실행 및 10초 간격 체크
   processScheduledPosts();
@@ -158,7 +161,10 @@ export async function processScheduledPosts() {
     await new Promise((resolve) => {
       db.run(
         "UPDATE posts SET status = 'failed' WHERE status = 'processing' AND (scheduled_at IS NULL OR datetime(scheduled_at) < datetime('now', '-10 minutes'))",
-        () => resolve(),
+        () => {
+          if (io) io.emit('posts-updated');
+          resolve();
+        },
       );
     });
 
@@ -266,13 +272,19 @@ export async function processScheduledPosts() {
 
             if (postResult.success) {
               // 성공 시 상태 업데이트 및 계정 카운트/순서 업데이트
-              db.run("UPDATE posts SET status = 'published', account_id = ? WHERE id = ?", [
-                account.id,
-                post.id,
-              ]);
+              db.run(
+                "UPDATE posts SET status = 'published', account_id = ? WHERE id = ?",
+                [account.id, post.id],
+                () => {
+                  if (io) io.emit('posts-updated');
+                },
+              );
               db.run(
                 'UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?',
                 [new Date().toISOString().split('T')[0], account.id],
+                () => {
+                  if (io) io.emit('posts-updated');
+                },
               );
               cleanupOldPublishedPosts(post.user_id);
               emitLog('success', `예약 포스팅 성공: ${post.title}`, post.user_id);
@@ -289,7 +301,7 @@ export async function processScheduledPosts() {
                     );
                   } else {
                     const nextScheduledAt = new Date(
-                      Date.now() + post.republish_interval_ms,
+                      Date.now() + Number(post.republish_interval_ms),
                     ).toISOString();
                     emitLog(
                       'info',
@@ -298,20 +310,23 @@ export async function processScheduledPosts() {
                     );
 
                     // Gemini API 키 조회
-                    const apiKey = await new Promise((resolve) => {
-                      db.get(
-                        "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
-                        [post.user_id],
-                        (err, row) => {
-                          if (err || !row || !row.value) return resolve(null);
-                          try {
-                            resolve(decrypt(row.value));
-                          } catch {
-                            resolve(null);
-                          }
-                        },
-                      );
-                    });
+                    let apiKey = await getGlobalSetting('master_gemini_api_key');
+                    if (!apiKey || apiKey === 'YOUR_KEY_HERE') {
+                      apiKey = await new Promise((resolve) => {
+                        db.get(
+                          "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
+                          [post.user_id],
+                          (err, row) => {
+                            if (err || !row || !row.value) return resolve(null);
+                            try {
+                              resolve(decrypt(row.value));
+                            } catch {
+                              resolve(null);
+                            }
+                          },
+                        );
+                      });
+                    }
 
                     if (apiKey) {
                       const geminiModel = await new Promise((resolve) => {
@@ -355,7 +370,10 @@ export async function processScheduledPosts() {
                           ],
                           (err) => {
                             if (err) reject(err);
-                            else resolve();
+                            else {
+                              if (io) io.emit('posts-updated');
+                              resolve();
+                            }
                           },
                         );
                       });
@@ -363,6 +381,12 @@ export async function processScheduledPosts() {
                       emitLog(
                         'success',
                         `[재발행] 키워드 "${post.keyword}" 새 원고 예약 완료 (${currentCount + 1}/5회) → ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`,
+                        post.user_id,
+                      );
+                    } else {
+                      emitLog(
+                        'error',
+                        `[재발행] 키워드 "${post.keyword}" 재발행 실패: Gemini API 키가 설정되지 않았거나 찾을 수 없습니다.`,
                         post.user_id,
                       );
                     }
@@ -376,11 +400,15 @@ export async function processScheduledPosts() {
                 }
               }
             } else {
-              db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
+              db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id], () => {
+                if (io) io.emit('posts-updated');
+              });
               emitLog('error', `예약 포스팅 실패: ${postResult.message}`, post.user_id);
             }
           } catch (error) {
-            db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id]);
+            db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id], () => {
+              if (io) io.emit('posts-updated');
+            });
             emitLog('error', `예약 발행 중 오류 발생: ${error.message}`, post.user_id);
           } finally {
             activeWorkers--;

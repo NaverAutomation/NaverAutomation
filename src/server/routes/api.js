@@ -232,7 +232,7 @@ router.get('/pexels/search', async (req, res) => {
 
 // POST /generate  (원고 생성)
 router.post('/generate', async (req, res) => {
-  const { keyword, title, engine = 'gemini' } = req.body;
+  const { keyword, title, engine = 'gemini', image_keywords } = req.body;
   if (!keyword) return res.status(400).json({ error: '키워드를 입력해주세요.' });
 
   try {
@@ -286,7 +286,17 @@ router.post('/generate', async (req, res) => {
     const pexelsApiKey = await getSettingFromDB(req.user.id, 'pexels_api_key');
     if (pexelsApiKey && pexelsApiKey !== 'YOUR_KEY_HERE') {
       try {
-        pexelsImages = await searchPexelsImages(pexelsApiKey, keyword, 4);
+        let searchKeyword = keyword;
+        if (image_keywords?.trim()) {
+          const kwList = image_keywords
+            .split(',')
+            .map((k) => k.trim())
+            .filter(Boolean);
+          if (kwList.length > 0) {
+            searchKeyword = kwList[Math.floor(Math.random() * kwList.length)];
+          }
+        }
+        pexelsImages = await searchPexelsImages(pexelsApiKey, searchKeyword, 4);
       } catch (pexelsErr) {
         console.error('[Pexels] Auto search failed during /generate:', pexelsErr.message);
       }
@@ -588,6 +598,7 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
     engine = 'gemini',
     image_url, // Storing JSON string containing representative and content images
     split_rep_images,
+    image_keywords,
   } = req.body;
 
   const campaignId = Date.now();
@@ -664,12 +675,22 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
           const pexelsApiKey = await getSettingFromDB(req.user.id, 'pexels_api_key');
           if (pexelsApiKey && pexelsApiKey !== 'YOUR_KEY_HERE') {
             try {
+              let searchKeyword = keyword;
+              if (image_keywords?.trim()) {
+                const kwList = image_keywords
+                  .split(',')
+                  .map((k) => k.trim())
+                  .filter(Boolean);
+                if (kwList.length > 0) {
+                  searchKeyword = kwList[i % kwList.length];
+                }
+              }
               emitLog(
                 'info',
-                `[Pexels] 키워드 "${keyword}"에 대한 이미지를 픽셀스에서 검색 중...`,
+                `[Pexels] 이미지 키워드 "${searchKeyword}"에 대한 이미지를 픽셀스에서 검색 중...`,
                 req.user.id,
               );
-              const pexelsSearchUrls = await searchPexelsImages(pexelsApiKey, keyword, 4);
+              const pexelsSearchUrls = await searchPexelsImages(pexelsApiKey, searchKeyword, 4);
               if (pexelsSearchUrls && pexelsSearchUrls.length > 0) {
                 contentImgList = pexelsSearchUrls;
                 emitLog(
