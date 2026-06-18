@@ -225,11 +225,11 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                           <span className="badge badge-secondary badge-xs font-bold">
                             🔑 자동 키워드 일괄
                           </span>
-                          {post.keyword && (
+                          {post.keyword ? (
                             <span className="badge badge-accent badge-xs font-bold text-accent-content">
                               #{post.keyword}
                             </span>
-                          )}
+                          ) : null}
                         </div>
 
                         <div className="flex items-center gap-3">
@@ -279,7 +279,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                     </div>
 
                     {/* 아코디언 영역: 그룹 내 개별 포스트 리스트 */}
-                    {expandedPostIds[post.id] && post.group_posts && (
+                    {expandedPostIds[post.id] && post.group_posts ? (
                       <div className="mt-2.5 p-3 bg-base-200/50 rounded-lg border border-base-300/60 space-y-2.5 animate-in slide-in-from-top-1 duration-150">
                         <div className="text-[11px] font-black text-base-content/50 uppercase tracking-wider mb-1">
                           📋 그룹 내 예약 글 목록 ({post.group_posts.length}건)
@@ -330,6 +330,13 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                                       className="input input-bordered input-xs w-full bg-base-100"
                                       placeholder="키워드"
                                     />
+                                    <input
+                                      type="text"
+                                      value={editingTags}
+                                      onChange={(e) => setEditingTags(e.target.value)}
+                                      className="input input-bordered input-xs w-full bg-base-100"
+                                      placeholder="태그 (쉼표로 구분)"
+                                    />
                                     <textarea
                                       value={editingContent}
                                       onChange={(e) => setEditingContent(e.target.value)}
@@ -361,15 +368,29 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="font-extrabold text-xs text-base-content truncate">
-                                    {gPost.title}
+                                  <div>
+                                    <div className="font-extrabold text-xs text-base-content truncate">
+                                      {gPost.title}
+                                    </div>
+                                    {gPost.tags ? (
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {gPost.tags.split(',').map((t) => (
+                                          <span
+                                            key={`${gPost.id}-tag-${t.trim()}`}
+                                            className="badge badge-primary badge-outline text-[9px] font-bold h-4 px-1 min-h-0"
+                                          >
+                                            {t.trim()}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : null}
                                   </div>
                                 )}
                               </div>
 
-                              {editingPostId !== gPost.id && (
+                              {editingPostId !== gPost.id ? (
                                 <div className="flex gap-1 shrink-0">
-                                  {gPost.status !== 'published' && gPost.status !== 'failed' && (
+                                  {gPost.status !== 'published' && gPost.status !== 'failed' ? (
                                     <>
                                       <button
                                         type="button"
@@ -396,14 +417,14 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                                         ✕
                                       </button>
                                     </>
-                                  )}
+                                  ) : null}
                                 </div>
-                              )}
+                              ) : null}
                             </div>
                           ))}
                         </div>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 );
               }
@@ -421,21 +442,21 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                         <span className="badge badge-neutral badge-xs font-mono font-bold opacity-60">
                           {post.naver_id ? `@${post.naver_id}` : '🔄 자동'}
                         </span>
-                        {post.post_type === 'keyword' && (
+                        {post.post_type === 'keyword' ? (
                           <span className="badge badge-secondary badge-xs font-bold">
                             🔑 자동 키워드
                           </span>
-                        )}
-                        {(post.post_type === 'manual' || !post.post_type) && (
+                        ) : null}
+                        {post.post_type === 'manual' || !post.post_type ? (
                           <span className="badge badge-ghost badge-xs font-bold border border-base-300 text-base-content/75">
                             ✍️ 수기/AI초안
                           </span>
-                        )}
-                        {post.keyword && (
+                        ) : null}
+                        {post.keyword ? (
                           <span className="badge badge-accent badge-xs font-bold text-accent-content">
                             #{post.keyword}
                           </span>
-                        )}
+                        ) : null}
                         {post.tags
                           ? post.tags.split(',').map((t) => (
                               <span
@@ -594,7 +615,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                         </>
                       )}
                     </div>
-                    {editingPostId !== post.id && (
+                    {editingPostId !== post.id ? (
                       <div className="flex flex-col gap-1 shrink-0">
                         <button
                           type="button"
@@ -613,7 +634,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                           ✕
                         </button>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                   {editingPostId !== post.id && expandedPostIds[post.id] && post.content ? (
                     <div className="text-xs text-base-content/75 bg-base-200/50 p-2.5 rounded-lg max-h-40 overflow-y-auto leading-relaxed font-medium whitespace-pre-wrap border border-base-300/40 animate-in slide-in-from-top-1 duration-150">

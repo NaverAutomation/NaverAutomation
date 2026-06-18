@@ -164,9 +164,9 @@ const SettingsTab = React.memo(
                 <li>
                   모든 블로그 원고 생성 및 자동 재작성(Rewrite)은 서버 AI 엔진을 통해 수행됩니다.
                 </li>
-                {import.meta.env.DEV && (
+                {import.meta.env.DEV ? (
                   <li>개인용 로컬 AI를 사용하려면 하단의 Ollama 설정을 이용하세요.</li>
-                )}
+                ) : null}
               </ul>
             </div>
           </div>
@@ -261,7 +261,7 @@ const SettingsTab = React.memo(
           </div>
         </div>
 
-        {import.meta.env.DEV && (
+        {import.meta.env.DEV ? (
           <>
             <SectionTitle className="mt-10">🦙 Ollama 연동 (로컬 AI)</SectionTitle>
             <div className="flex flex-col gap-2">
@@ -285,7 +285,7 @@ const SettingsTab = React.memo(
               />
             </div>
           </>
-        )}
+        ) : null}
 
         <div className="mt-8 pt-6 border-t border-t-base-300 flex justify-end">
           <Btn

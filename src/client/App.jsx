@@ -122,12 +122,17 @@ const App = () => {
       setTaskStatus(status);
     });
 
+    socket.on('posts-updated', () => {
+      fetchAll();
+    });
+
     return () => {
       socket.off('log');
       socket.off('task-status');
+      socket.off('posts-updated');
       socket.disconnect();
     };
-  }, []);
+  }, [fetchAll]);
 
   useEffect(() => {
     const api = window.electronAPI;
@@ -325,7 +330,7 @@ const App = () => {
       {/* ── Content (Rule: rendering-conditional-render) */}
       <main className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 flex-1">
         <div className="animate-in fade-in duration-300">
-          {visitedTabs.dashboard && (
+          {visitedTabs.dashboard ? (
             <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
               <Suspense
                 fallback={
@@ -347,8 +352,8 @@ const App = () => {
                 />
               </Suspense>
             </div>
-          )}
-          {visitedTabs.settings && (
+          ) : null}
+          {visitedTabs.settings ? (
             <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
               <Suspense
                 fallback={
@@ -368,8 +373,8 @@ const App = () => {
                 />
               </Suspense>
             </div>
-          )}
-          {visitedTabs.accounts && (
+          ) : null}
+          {visitedTabs.accounts ? (
             <div style={{ display: activeTab === 'accounts' ? 'block' : 'none' }}>
               <Suspense
                 fallback={
@@ -384,8 +389,8 @@ const App = () => {
                 <AccountsTab accounts={accounts} fetchAll={fetchAll} />
               </Suspense>
             </div>
-          )}
-          {visitedTabs.generate && (
+          ) : null}
+          {visitedTabs.generate ? (
             <div style={{ display: activeTab === 'generate' ? 'block' : 'none' }}>
               <Suspense
                 fallback={
@@ -406,8 +411,8 @@ const App = () => {
                 />
               </Suspense>
             </div>
-          )}
-          {visitedTabs.queue && (
+          ) : null}
+          {visitedTabs.queue ? (
             <div style={{ display: activeTab === 'queue' ? 'block' : 'none' }}>
               <Suspense
                 fallback={
@@ -427,8 +432,8 @@ const App = () => {
                 />
               </Suspense>
             </div>
-          )}
-          {visitedTabs.logs && (
+          ) : null}
+          {visitedTabs.logs ? (
             <div style={{ display: activeTab === 'logs' ? 'block' : 'none' }}>
               <Suspense
                 fallback={
@@ -443,7 +448,7 @@ const App = () => {
                 <LogsTab realtimeLogs={realtimeLogs} setRealtimeLogs={setRealtimeLogs} />
               </Suspense>
             </div>
-          )}
+          ) : null}
         </div>
       </main>
     </div>

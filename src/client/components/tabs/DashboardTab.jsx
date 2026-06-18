@@ -101,13 +101,25 @@ const DashboardTab = React.memo(
       { label: '예약/대기', value: scheduledPosts.length, sub: '발행 예정', color: 'text-warning' },
     ];
 
-    // ── 다음 발행 대기 중인 예약글 ──
+    // ── 다음 발행 대기 중인 예약글 (O(N) 최소값 스캔 적용) ──
     const nextPost = useMemo(() => {
       if (!scheduledPosts || scheduledPosts.length === 0) return null;
-      const sorted = [...scheduledPosts]
-        .filter((p) => p.status === 'scheduled' || p.status === 'pending')
-        .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
-      return sorted[0] || null;
+      let earliest = null;
+      for (let i = 0; i < scheduledPosts.length; i++) {
+        const p = scheduledPosts[i];
+        if (p.status === 'scheduled' || p.status === 'pending') {
+          if (!earliest) {
+            earliest = p;
+          } else {
+            const currentMs = new Date(p.scheduled_at).getTime();
+            const earliestMs = new Date(earliest.scheduled_at).getTime();
+            if (currentMs < earliestMs) {
+              earliest = p;
+            }
+          }
+        }
+      }
+      return earliest;
     }, [scheduledPosts]);
 
     // ── 다음 발행까지의 카운트다운 텍스트 계산 ──
@@ -174,7 +186,7 @@ const DashboardTab = React.memo(
                 </div>
               </div>
 
-              {nextPost && (
+              {nextPost ? (
                 <div className="mt-2 text-xs font-semibold text-base-content/80 flex flex-col bg-warning/10 p-3.5 rounded-xl border border-warning/20 animate-in fade-in duration-200">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-warning-content font-black">
@@ -191,7 +203,7 @@ const DashboardTab = React.memo(
                     설정 시간: {parseUtcDate(nextPost.scheduled_at)?.toLocaleString('ko-KR') || '-'}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           </Card>
 
@@ -216,17 +228,17 @@ const DashboardTab = React.memo(
                     {log.message}
                   </div>
                 ))}
-              {realtimeLogs.length === 0 && (
+              {realtimeLogs.length === 0 ? (
                 <p className="text-base-content/40 text-sm italic p-4 text-center">
                   아직 기록된 로그가 없습니다.
                 </p>
-              )}
+              ) : null}
             </div>
           </Card>
         </div>
 
         {/* 최근 발행 */}
-        {posts.length > 0 && (
+        {posts.length > 0 ? (
           <Card>
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-base-300">
               <SectionTitle className="!mb-0">📰 최근 발행 현황</SectionTitle>
@@ -301,7 +313,7 @@ const DashboardTab = React.memo(
                           >
                             🔍 조회
                           </button>
-                          {p.status === 'failed' && (
+                          {p.status === 'failed' ? (
                             <button
                               type="button"
                               onClick={() => handleRetry(p.id)}
@@ -310,7 +322,7 @@ const DashboardTab = React.memo(
                             >
                               🔄 재시도
                             </button>
-                          )}
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => handleDeletePost(p.id)}
@@ -332,7 +344,7 @@ const DashboardTab = React.memo(
               show={!!selectedPost}
               onClose={() => setSelectedPost(null)}
             >
-              {selectedPost && (
+              {selectedPost ? (
                 <div className="flex flex-col gap-6">
                   <div>
                     <div className="label-text font-bold text-base-content/60 block mb-2">
@@ -343,7 +355,7 @@ const DashboardTab = React.memo(
                     </div>
                   </div>
 
-                  {selectedPost.image_url && (
+                  {selectedPost.image_url ? (
                     <div>
                       <div className="label-text font-bold text-base-content/60 block mb-2">
                         생성된 커버 이미지
@@ -356,7 +368,7 @@ const DashboardTab = React.memo(
                         />
                       </figure>
                     </div>
-                  )}
+                  ) : null}
 
                   <div>
                     <div className="label-text font-bold text-base-content/60 block mb-2">
@@ -368,7 +380,7 @@ const DashboardTab = React.memo(
                   </div>
 
                   <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-base-300">
-                    {selectedPost.status === 'failed' && (
+                    {selectedPost.status === 'failed' ? (
                       <Btn
                         variant="primary"
                         onClick={() => handleRetry(selectedPost.id)}
@@ -376,7 +388,7 @@ const DashboardTab = React.memo(
                       >
                         🔄 다시 발행하기
                       </Btn>
-                    )}
+                    ) : null}
                     <Btn
                       variant="error"
                       onClick={() => {
@@ -391,10 +403,10 @@ const DashboardTab = React.memo(
                     </Btn>
                   </div>
                 </div>
-              )}
+              ) : null}
             </Modal>
           </Card>
-        )}
+        ) : null}
       </div>
     );
   },

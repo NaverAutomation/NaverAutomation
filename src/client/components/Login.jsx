@@ -72,11 +72,11 @@ const Login = ({ onLogin }) => {
               />
             </div>
 
-            {error && (
+            {error ? (
               <div className="alert alert-error mt-4 py-2 px-4 text-sm font-semibold">
                 <span>{error}</span>
               </div>
-            )}
+            ) : null}
 
             <div className="form-control mt-8">
               <button

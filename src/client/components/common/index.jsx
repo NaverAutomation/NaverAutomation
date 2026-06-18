@@ -1,6 +1,8 @@
 import React, { useId } from 'react';
 
-export const Card = React.memo(({ children, className = '', style = {} }) => (
+const EMPTY_STYLE = {};
+
+export const Card = React.memo(({ children, className = '', style = EMPTY_STYLE }) => (
   <div className={`card bg-base-200 border border-base-300 shadow-xl ${className}`} style={style}>
     <div className="card-body p-6 flex-1 min-h-0">{children}</div>
   </div>
@@ -19,11 +21,11 @@ export const Input = React.memo(({ label, className = '', id, ...props }) => {
   const inputId = id || defaultId;
   return (
     <div className="form-control w-full mb-4">
-      {label && (
+      {label ? (
         <label htmlFor={inputId} className="label py-1">
           <span className="label-text font-bold text-base-content/80">{label}</span>
         </label>
-      )}
+      ) : null}
       <input
         id={inputId}
         className={`input input-bordered bg-base-100 focus:border-primary focus:outline-none transition-colors w-full ${className}`}
@@ -38,11 +40,11 @@ export const Textarea = React.memo(({ label, className = '', id, ...props }) => 
   const inputId = id || defaultId;
   return (
     <div className="form-control w-full mb-4">
-      {label && (
+      {label ? (
         <label htmlFor={inputId} className="label py-1">
           <span className="label-text font-bold text-base-content/80">{label}</span>
         </label>
-      )}
+      ) : null}
       <textarea
         id={inputId}
         className={`textarea textarea-bordered bg-base-100 focus:border-primary focus:outline-none transition-colors w-full leading-relaxed resize-y ${className}`}

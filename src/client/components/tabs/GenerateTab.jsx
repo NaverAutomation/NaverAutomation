@@ -32,6 +32,7 @@ const GenerateTab = React.memo(
     const [randomOffset, setRandomOffset] = useState(30); // ±분
     const [useRandomOffset, setUseRandomOffset] = useState(false);
     const [customTitle, setCustomTitle] = useState('');
+    const [imageKeywords, setImageKeywords] = useState('');
 
     // AI 엔진 기본값 (고정)
     const engine = 'gemini';
@@ -58,6 +59,7 @@ const GenerateTab = React.memo(
     const [keywordRepresentativeImages, setKeywordRepresentativeImages] = useState([]);
     const [keywordContentImages, setKeywordContentImages] = useState([]);
     const [splitRepImages, setSplitRepImages] = useState(true);
+    const [keywordImageKeywords, setKeywordImageKeywords] = useState('');
 
     // ── 이미지 파일 input refs ──
     const manualImageInputRef = useRef(null);
@@ -68,14 +70,18 @@ const GenerateTab = React.memo(
 
     // ── 현재 대기열의 활성 키워드 목록 필터링 ──
     const activeKeywords = useMemo(() => {
-      return scheduledPosts
-        .filter(
-          (post) =>
-            post.post_type === 'keyword' &&
-            ['pending', 'scheduled', 'processing'].includes(post.status),
-        )
-        .map((post) => post.keyword)
-        .filter(Boolean);
+      const result = [];
+      for (let i = 0; i < scheduledPosts.length; i++) {
+        const post = scheduledPosts[i];
+        if (
+          post.post_type === 'keyword' &&
+          post.keyword &&
+          (post.status === 'pending' || post.status === 'scheduled' || post.status === 'processing')
+        ) {
+          result.push(post.keyword);
+        }
+      }
+      return result;
     }, [scheduledPosts]);
 
     // ── 외부 이력 재사용 이벤트 감지 ──
@@ -167,10 +173,12 @@ const GenerateTab = React.memo(
               keyword: trimmed,
               title: customTitle.trim() || undefined,
               engine,
+              image_keywords: imageKeywords.trim() || undefined,
             }),
           });
           setGenerated(data);
           setCustomTitle('');
+          setImageKeywords('');
         }
 
         setTimeout(() => {
@@ -462,6 +470,7 @@ const GenerateTab = React.memo(
               content: keywordContentImages,
             }),
             split_rep_images: splitRepImages,
+            image_keywords: keywordImageKeywords.trim() || undefined,
           }),
         });
 
@@ -470,6 +479,7 @@ const GenerateTab = React.memo(
           setKeywordStartTime('');
           setKeywordRepresentativeImages([]);
           setKeywordContentImages([]);
+          setKeywordImageKeywords('');
           await fetchAll();
         } else {
           alert(`예약 실패: ${res.error || '알 수 없는 오류'}`);
@@ -520,7 +530,7 @@ const GenerateTab = React.memo(
             </button>
           </div>
 
-          {activeSubTab === 'ai' && (
+          {activeSubTab === 'ai' ? (
             /* ── AI 원고 생성기 폼 ── */
             <div className="space-y-6">
               {/* 모드 토글: 새 글 생성 vs 기존 글 수정 */}
@@ -562,6 +572,18 @@ const GenerateTab = React.memo(
                       placeholder="특정 제목으로 글을 쓰고 싶다면 입력하세요. 비워두면 AI가 자동으로 생성합니다."
                       value={customTitle}
                       onChange={(e) => setCustomTitle(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <div className="label-text font-bold block mb-2 px-1 text-base-content/80">
+                      본문 사진 Pexels 검색 키워드 (선택, 쉼표 구분)
+                    </div>
+                    <input
+                      type="text"
+                      className="input input-bordered w-full bg-base-100 placeholder-base-content/30 focus:border-primary shadow-inner text-sm font-semibold mb-4"
+                      placeholder="예: 동물, 개, 도시 (비워두면 초안 주제로 검색)"
+                      value={imageKeywords}
+                      onChange={(e) => setImageKeywords(e.target.value)}
                     />
                   </div>
                   <div className="relative">
@@ -621,9 +643,9 @@ const GenerateTab = React.memo(
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
-          {activeSubTab === 'keyword' && (
+          {activeSubTab === 'keyword' ? (
             /* ── 자동 키워드 예약 폼 ── */
             <form onSubmit={handleKeywordSchedule} className="space-y-6">
               <div>
@@ -710,7 +732,24 @@ const GenerateTab = React.memo(
                 </div>
               </div>
 
-              <div className="divider my-2">사진 첨부 설정</div>
+              <div className="divider my-2">사진 첨부 및 검색 설정</div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                <div className="form-control">
+                  <div className="label py-1">
+                    <span className="label-text font-bold text-xs text-base-content/80">
+                      본문 사진 Pexels 검색 키워드 (선택, 쉼표 구분)
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    className="input input-bordered bg-base-100 font-semibold text-sm h-[3rem]"
+                    placeholder="예: 동물, 개, 도시 (비워두면 각 글의 키워드로 검색)"
+                    value={keywordImageKeywords}
+                    onChange={(e) => setKeywordImageKeywords(e.target.value)}
+                  />
+                </div>
+              </div>
 
               <div className="form-control bg-base-200/50 p-3 rounded-xl border border-base-300 max-w-xs mb-4">
                 <label className="label cursor-pointer justify-start gap-4 py-0">
@@ -851,9 +890,9 @@ const GenerateTab = React.memo(
                 </button>
               </div>
             </form>
-          )}
+          ) : null}
 
-          {activeSubTab === 'manual' && (
+          {activeSubTab === 'manual' ? (
             /* ── 수기 직접 작성 폼 ── */
             <div className="space-y-4">
               <Input
@@ -1021,7 +1060,7 @@ const GenerateTab = React.memo(
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
         </Card>
 
         {/* ── AI 초안 생성 완료 시 편집 에디터 카드 ── */}
