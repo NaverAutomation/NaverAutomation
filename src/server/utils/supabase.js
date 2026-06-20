@@ -60,6 +60,11 @@ export function getCachedGlobalSetting(key) {
 }
 
 export async function getGlobalSetting(key, token) {
+  // 캐시가 존재하고 token이 없을 경우 캐시값 즉시 반환
+  if (!token && globalSettingCache.has(key)) {
+    return globalSettingCache.get(key);
+  }
+
   const client = token ? getAuthenticatedClient(token) : supabase;
   const { data, error } = await client
     .from('global_settings')
