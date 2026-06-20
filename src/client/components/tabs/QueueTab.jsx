@@ -45,6 +45,19 @@ const SuccessIcon = () => (
   </svg>
 );
 
+const FailedIcon = () => (
+  <svg
+    className="w-3.5 h-3.5 text-error shrink-0"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={3}
+  >
+    <title>발행 실패</title>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
 const PendingIcon = () => (
   <svg
     className="w-3.5 h-3.5 text-base-content/20 shrink-0 animate-pulse"
@@ -58,27 +71,31 @@ const PendingIcon = () => (
   </svg>
 );
 
-const renderProgressIcons = (publishedCount = 0, activeCount = 0) => {
-  const totalSlots = 5;
+const renderProgressIcons = (publishedCount = 0, activeCount = 0, totalCount = 5, failedCount = 0) => {
   const icons = [];
 
   // 성공한 개수만큼 SuccessIcon 추가
-  const successCount = Math.min(publishedCount, totalSlots);
-  for (let i = 0; i < successCount; i++) {
+  for (let i = 0; i < publishedCount; i++) {
     icons.push(<SuccessIcon key={`success-${i}`} />);
   }
 
-  // 남은 슬롯만큼 PendingIcon 추가
-  const pendingCount = Math.max(0, totalSlots - successCount);
-  for (let i = 0; i < pendingCount; i++) {
+  // 실패한 개수만큼 FailedIcon 추가
+  for (let i = 0; i < failedCount; i++) {
+    icons.push(<FailedIcon key={`failed-${i}`} />);
+  }
+
+  // 대기 중인 개수만큼 PendingIcon 추가
+  for (let i = 0; i < activeCount; i++) {
     icons.push(<PendingIcon key={`pending-${i}`} />);
   }
 
   return (
     <div className="flex items-center gap-1 bg-base-200/60 px-2 py-0.5 rounded-md border border-base-300/40">
-      {icons}
+      <div className="flex items-center gap-0.5">
+        {icons}
+      </div>
       <span className="text-[10px] font-bold text-base-content/60 ml-1">
-        {activeCount === 0 ? '완료' : '예약진행중'}
+        ({publishedCount}/{totalCount}) {activeCount === 0 && failedCount === 0 ? '완료' : '예약진행중'}
       </span>
     </div>
   );
@@ -221,7 +238,7 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                          {renderProgressIcons(post.published_count, post.active_count)}
+                          {renderProgressIcons(post.published_count, post.active_count, post.total_count, post.failed_count)}
                           <span className="badge badge-secondary badge-xs font-bold">
                             🔑 자동 키워드 일괄
                           </span>

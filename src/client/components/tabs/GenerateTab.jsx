@@ -60,6 +60,7 @@ const GenerateTab = React.memo(
     const [keywordContentImages, setKeywordContentImages] = useState([]);
     const [splitRepImages, setSplitRepImages] = useState(true);
     const [keywordImageKeywords, setKeywordImageKeywords] = useState('');
+    const [keywordTags, setKeywordTags] = useState('');
 
     // ── 이미지 파일 input refs ──
     const manualImageInputRef = useRef(null);
@@ -471,6 +472,7 @@ const GenerateTab = React.memo(
             }),
             split_rep_images: splitRepImages,
             image_keywords: keywordImageKeywords.trim() || undefined,
+            tags: keywordTags.trim() || undefined,
           }),
         });
 
@@ -480,6 +482,7 @@ const GenerateTab = React.memo(
           setKeywordRepresentativeImages([]);
           setKeywordContentImages([]);
           setKeywordImageKeywords('');
+          setKeywordTags('');
           await fetchAll();
         } else {
           alert(`예약 실패: ${res.error || '알 수 없는 오류'}`);
@@ -747,6 +750,21 @@ const GenerateTab = React.memo(
                     placeholder="예: 동물, 개, 도시 (비워두면 각 글의 키워드로 검색)"
                     value={keywordImageKeywords}
                     onChange={(e) => setKeywordImageKeywords(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-control">
+                  <div className="label py-1">
+                    <span className="label-text font-bold text-xs text-base-content/80">
+                      태그 미리 입력 (선택, 쉼표 구분 - 모든 예약글에 공통 적용)
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    className="input input-bordered bg-base-100 font-semibold text-sm h-[3rem]"
+                    placeholder="예: 아이폰, 신제품, 테크 (비워두면 AI가 태그 자동 생성)"
+                    value={keywordTags}
+                    onChange={(e) => setKeywordTags(e.target.value)}
                   />
                 </div>
               </div>

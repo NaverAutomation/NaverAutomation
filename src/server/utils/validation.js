@@ -47,4 +47,5 @@ export const scheduleKeywordsSchema = z.object({
   image_url: z.string().optional(),
   split_rep_images: z.boolean().optional(),
   image_keywords: z.string().optional(),
+  tags: z.string().optional(),
 });

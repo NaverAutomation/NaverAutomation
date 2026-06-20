@@ -599,6 +599,7 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
     image_url, // Storing JSON string containing representative and content images
     split_rep_images,
     image_keywords,
+    tags,
   } = req.body;
 
   const campaignId = Date.now();
@@ -620,7 +621,6 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
     }
 
     const results = [];
-    let currentScheduledTime = new Date(start_time);
     const intervalMs = (Number(interval_hours) * 60 + Number(interval_minutes)) * 60 * 1000;
 
     let parsedImages = { representative: [], content: [] };
@@ -634,131 +634,137 @@ router.post('/posts/schedule-keywords', validateBody(scheduleKeywordsSchema), as
     const repImages = parsedImages.representative || [];
     const contentImages = parsedImages.content || [];
 
-    // 순차적으로 생성하여 네이버 제재 및 동시 API 요청 제한 방지
-    for (let i = 0; i < keywords.length; i++) {
-      const keyword = keywords[i].trim();
-      if (!keyword) continue;
+    // 키워드별로 5개씩 총 5회차를 라운드 로빈 형태로 생성하여 예약 대기열에 한꺼번에 등록
+    for (let step = 0; step < 5; step++) {
+      for (let kwIdx = 0; kwIdx < keywords.length; kwIdx++) {
+        const keyword = keywords[kwIdx].trim();
+        if (!keyword) continue;
 
-      emitLog(
-        'info',
-        `[자동 키워드 예약] 키워드 "${keyword}" 원고 생성 및 예약 등록 중 (${i + 1}/${keywords.length})`,
-        req.user.id,
-      );
+        const globalIdx = step * keywords.length + kwIdx;
+        const totalCount = keywords.length * 5;
 
-      try {
-        const content = await generateContent(engine, aiConfig, keyword);
+        emitLog(
+          'info',
+          `[자동 키워드 예약] 키워드 "${keyword}" (${step + 1}/5회차) 원고 생성 및 예약 등록 중 (${globalIdx + 1}/${totalCount})`,
+          req.user.id,
+        );
 
-        let generatedTags = '';
-        if (engine !== 'ollama' && aiConfig.apiKey) {
-          generatedTags = await generateTagsWithGemini(
-            aiConfig.apiKey,
-            keyword,
-            content.title,
-            content.content,
-          );
-        }
+        try {
+          const content = await generateContent(engine, aiConfig, keyword);
 
-        let repImgList = [];
-        if (split_rep_images !== false) {
-          const repImg = repImages.length > 0 ? repImages[i % repImages.length] : null;
-          repImgList = repImg ? [repImg] : [];
-        } else {
-          repImgList = repImages;
-        }
+          let generatedTags = tags || '';
+          if (!generatedTags && engine !== 'ollama' && aiConfig.apiKey) {
+            generatedTags = await generateTagsWithGemini(
+              aiConfig.apiKey,
+              keyword,
+              content.title,
+              content.content,
+            );
+          }
 
-        let contentImgList = [];
-        if (contentImages.length > 0) {
-          const contentImg = contentImages[i % contentImages.length];
-          contentImgList = contentImg ? [contentImg] : [];
-        } else {
-          // Pexels API 키가 설정되어 있으면 해당 키워드로 이미지 4장을 검색해 본문 이미지로 자동 삽입
-          const pexelsApiKey = await getSettingFromDB(req.user.id, 'pexels_api_key');
-          if (pexelsApiKey && pexelsApiKey !== 'YOUR_KEY_HERE') {
-            try {
-              let searchKeyword = keyword;
-              if (image_keywords?.trim()) {
-                const kwList = image_keywords
-                  .split(',')
-                  .map((k) => k.trim())
-                  .filter(Boolean);
-                if (kwList.length > 0) {
-                  searchKeyword = kwList[i % kwList.length];
+          let repImgList = [];
+          if (split_rep_images !== false) {
+            const repImg = repImages.length > 0 ? repImages[globalIdx % repImages.length] : null;
+            repImgList = repImg ? [repImg] : [];
+          } else {
+            repImgList = repImages;
+          }
+
+          let contentImgList = [];
+          if (contentImages.length > 0) {
+            const contentImg = contentImages[globalIdx % contentImages.length];
+            contentImgList = contentImg ? [contentImg] : [];
+          } else {
+            // Pexels API 키가 설정되어 있으면 해당 키워드로 이미지 4장을 검색해 본문 이미지로 자동 삽입
+            const pexelsApiKey = await getSettingFromDB(req.user.id, 'pexels_api_key');
+            if (pexelsApiKey && pexelsApiKey !== 'YOUR_KEY_HERE') {
+              try {
+                let searchKeyword = keyword;
+                if (image_keywords?.trim()) {
+                  const kwList = image_keywords
+                    .split(',')
+                    .map((k) => k.trim())
+                    .filter(Boolean);
+                  if (kwList.length > 0) {
+                    searchKeyword = kwList[globalIdx % kwList.length];
+                  }
                 }
-              }
-              emitLog(
-                'info',
-                `[Pexels] 이미지 키워드 "${searchKeyword}"에 대한 이미지를 픽셀스에서 검색 중...`,
-                req.user.id,
-              );
-              const pexelsSearchUrls = await searchPexelsImages(pexelsApiKey, searchKeyword, 4);
-              if (pexelsSearchUrls && pexelsSearchUrls.length > 0) {
-                contentImgList = pexelsSearchUrls;
                 emitLog(
-                  'success',
-                  `[Pexels] 이미지 ${pexelsSearchUrls.length}장을 수집하여 본문에 자동 매칭했습니다.`,
+                  'info',
+                  `[Pexels] 이미지 키워드 "${searchKeyword}"에 대한 이미지를 픽셀스에서 검색 중...`,
+                  req.user.id,
+                );
+                const pexelsSearchUrls = await searchPexelsImages(pexelsApiKey, searchKeyword, 4);
+                if (pexelsSearchUrls && pexelsSearchUrls.length > 0) {
+                  contentImgList = pexelsSearchUrls;
+                  emitLog(
+                    'success',
+                    `[Pexels] 이미지 ${pexelsSearchUrls.length}장을 수집하여 본문에 자동 매칭했습니다.`,
+                    req.user.id,
+                  );
+                }
+              } catch (pexelsErr) {
+                emitLog(
+                  'warn',
+                  `[Pexels] 이미지 검색 실패: ${pexelsErr.message}. 이미지 없이 진행합니다.`,
                   req.user.id,
                 );
               }
-            } catch (pexelsErr) {
-              emitLog(
-                'warn',
-                `[Pexels] 이미지 검색 실패: ${pexelsErr.message}. 이미지 없이 진행합니다.`,
-                req.user.id,
-              );
             }
           }
-        }
 
-        const finalImageUrl = JSON.stringify({
-          representative: repImgList,
-          content: contentImgList,
-        });
+          const finalImageUrl = JSON.stringify({
+            representative: repImgList,
+            content: contentImgList,
+          });
 
-        // 1분 ~ 2분 사이의 랜덤 오차 추가
-        const randomOffsetMs = 60000 + Math.random() * 60000;
-        const scheduledTimeWithOffset = new Date(currentScheduledTime.getTime() + randomOffsetMs);
-        const finalScheduledAt = scheduledTimeWithOffset.toISOString();
+          // 시간 배정: 시작 시간 + (글의 순서 인덱스 * 간격)
+          const timeOffsetMs = globalIdx * intervalMs;
+          const baseScheduledTime = new Date(new Date(start_time).getTime() + timeOffsetMs);
 
-        await new Promise((resolve, reject) => {
-          const sql =
-            'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, republish_interval_ms, campaign_id, republish_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-          db.run(
-            sql,
-            [
-              req.user.id,
-              use_round_robin ? null : account_id || null,
-              content.title,
-              content.content,
-              finalImageUrl,
-              headless ? 1 : 0,
-              finalScheduledAt,
-              'scheduled',
-              'keyword',
-              keyword,
-              generatedTags,
-              intervalMs > 0 ? intervalMs : null,
-              campaignId,
-              1,
-            ],
-            function (err) {
-              if (err) reject(err);
-              else resolve(this.lastID);
-            },
+          // 1분 ~ 2분 사이의 랜덤 오차 추가
+          const randomOffsetMs = 60000 + Math.random() * 60000;
+          const scheduledTimeWithOffset = new Date(baseScheduledTime.getTime() + randomOffsetMs);
+          const finalScheduledAt = scheduledTimeWithOffset.toISOString();
+
+          await new Promise((resolve, reject) => {
+            const sql =
+              'INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, republish_interval_ms, campaign_id, republish_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+            db.run(
+              sql,
+              [
+                req.user.id,
+                use_round_robin ? null : account_id || null,
+                content.title,
+                content.content,
+                finalImageUrl,
+                headless ? 1 : 0,
+                finalScheduledAt,
+                'scheduled',
+                'keyword',
+                keyword,
+                generatedTags,
+                null, // 한꺼번에 다 생성하므로 스케줄러에서 중복 재발행하지 않도록 null 설정
+                campaignId,
+                step + 1, // 회차 번호 저장
+              ],
+              function (err) {
+                if (err) reject(err);
+                else resolve(this.lastID);
+              },
+            );
+          });
+
+          results.push({ keyword, success: true, time: finalScheduledAt, step: step + 1 });
+        } catch (err) {
+          emitLog(
+            'error',
+            `[자동 키워드 예약] 키워드 "${keyword}" (${step + 1}/5회차) 생성 실패: ${err.message}`,
+            req.user.id,
           );
-        });
-
-        results.push({ keyword, success: true, time: finalScheduledAt });
-      } catch (err) {
-        emitLog(
-          'error',
-          `[자동 키워드 예약] 키워드 "${keyword}" 생성 실패: ${err.message}`,
-          req.user.id,
-        );
-        results.push({ keyword, success: false, error: err.message });
+          results.push({ keyword, success: false, step: step + 1, error: err.message });
+        }
       }
-
-      // 다음 예약 시각 계산
-      currentScheduledTime = new Date(currentScheduledTime.getTime() + intervalMs);
     }
 
     if (!getSchedulerStatus().isRunning) {
