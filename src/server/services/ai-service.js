@@ -263,3 +263,77 @@ export async function generateImageWithGemini(apiKey, keyword, _title, _content)
     return null;
   }
 }
+
+/**
+ * Google Gemini를 이용한 이전 글 기반 연관 키워드 추출
+ */
+export async function generateNextKeywordWithGemini(apiKey, title, content) {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const modelName = 'gemini-2.5-flash-lite';
+
+  try {
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const prompt = `당신은 네이버 블로그 SEO 전문가입니다.
+다음 제공된 이전 블로그 글의 제목과 본문을 분석하여, 자연스럽게 이어지거나 독자가 흥미를 가질 만한 후속 연관 키워드 1개를 단어 형태로만 추천해주세요.
+반드시 다른 설명이나 기호 없이 오직 키워드 1개만 단어로 응답해야 합니다. 
+(예시: 신용카드 추천)
+
+이전 글 제목: ${title}
+이전 글 본문: ${content.substring(0, 1000)}...
+`;
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text().trim().replace(/^[^a-zA-Z0-9가-힣\s]+|[^a-zA-Z0-9가-힣\s]+$/g, '');
+  } catch (error) {
+    console.error('Gemini Next Keyword Generation Error:', error);
+    return '';
+  }
+}
+
+/**
+ * Ollama를 이용한 이전 글 기반 연관 키워드 추출
+ */
+export async function generateNextKeywordWithOllama(endpoint, model, title, content) {
+  try {
+    let baseUrl = (endpoint || 'http://localhost:11434').trim();
+    if (baseUrl.endsWith('/api/generate')) {
+      baseUrl = baseUrl.replace(/\/api\/generate$/, '');
+    } else if (baseUrl.endsWith('/api/generate/')) {
+      baseUrl = baseUrl.replace(/\/api\/generate\/$/, '');
+    }
+    const url = baseUrl.endsWith('/') ? `${baseUrl}api/generate` : `${baseUrl}/api/generate`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: model || 'gemma4',
+        prompt: `당신은 블로그 SEO 전문가입니다. 아래 제공된 블로그 글의 제목과 본문을 분석하여, 자연스럽게 이어지거나 독자가 흥미를 가질 만한 후속 연관 키워드 1개를 단어 형태로만 추천해주세요. 다른 설명 없이 오직 단어(예: 신용카드 추천)로만 응답하세요.\n\n제목: ${title}\n본문: ${content.substring(0, 500)}...`,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.statusText}`);
+    }
+    const data = await response.json();
+    return data.response.trim().replace(/^[^a-zA-Z0-9가-힣\s]+|[^a-zA-Z0-9가-힣\s]+$/g, '');
+  } catch (error) {
+    console.error('Ollama Next Keyword Generation Error:', error);
+    return '';
+  }
+}
+
+/**
+ * 통합 이전 글 기반 연관 키워드 추출 함수
+ */
+export async function generateNextKeyword(engine, apiKeyOrConfig, title, content) {
+  if (engine === 'gemini') {
+    const apiKey = typeof apiKeyOrConfig === 'string' ? apiKeyOrConfig : apiKeyOrConfig.apiKey;
+    return await generateNextKeywordWithGemini(apiKey, title, content);
+  } else if (engine === 'ollama') {
+    const { endpoint, model } = apiKeyOrConfig;
+    return await generateNextKeywordWithOllama(endpoint, model, title, content);
+  }
+  return '';
+}

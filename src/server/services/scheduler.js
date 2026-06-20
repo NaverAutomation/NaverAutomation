@@ -1,7 +1,7 @@
 import db from '../db/database.js';
 import { decrypt } from '../utils/crypto.js';
 import { getGlobalSetting } from '../utils/supabase.js';
-import { generateContent, generateTagsWithGemini } from './ai-service.js';
+import { generateContent, generateTagsWithGemini, generateNextKeyword } from './ai-service.js';
 import { postToNaver } from './naver-service.js';
 
 function cleanupOldPublishedPosts(userId) {
@@ -157,6 +157,24 @@ export async function processScheduledPosts() {
   if (activeWorkers >= MAX_WORKERS) return;
 
   try {
+    // 0. 각 유저별 키워드 대기열 자동 꼬리물기 연장 체크
+    await new Promise((resolve) => {
+      db.all("SELECT DISTINCT user_id FROM posts WHERE status IN ('scheduled', 'pending', 'processing')", [], async (err, rows) => {
+        if (!err && rows) {
+          for (const row of rows) {
+            if (row.user_id) {
+              try {
+                await checkAndExtendKeywordQueue(row.user_id);
+              } catch (e) {
+                console.error(`[자동 연장] 유저 ${row.user_id} 대기열 연장 실패:`, e);
+              }
+            }
+          }
+        }
+        resolve();
+      });
+    });
+
     // 10분 이상 stuck된 processing 포스트가 있다면 failed 처리하여 무한 대기 방지
     await new Promise((resolve) => {
       db.run(
@@ -419,5 +437,178 @@ export async function processScheduledPosts() {
     );
   } catch (err) {
     emitLog('error', `스케줄러 작업 처리 중 치명적 오류: ${err.message}`);
+  }
+}
+
+/**
+ * 24시간 순환 발행: 남은 예약이 부족할 경우 대기열을 꼬리물기 연장 생성
+ */
+export async function checkAndExtendKeywordQueue(userId) {
+  try {
+    // 1. 해당 유저의 가장 늦은 예약 건 가져오기 (post_type = 'keyword')
+    const lastPost = await new Promise((resolve) => {
+      db.get(
+        "SELECT * FROM posts WHERE user_id = ? AND post_type = 'keyword' ORDER BY scheduled_at DESC LIMIT 1",
+        [userId],
+        (err, row) => resolve(row || null)
+      );
+    });
+
+    if (!lastPost) return; // 예약 내역이 아예 없으면 진행 안 함
+
+    // 2. 남은 예약 대기열 건수 조회 (scheduled, pending, processing 상태)
+    const remainingCount = await new Promise((resolve) => {
+      db.get(
+        "SELECT COUNT(*) as cnt FROM posts WHERE user_id = ? AND post_type = 'keyword' AND status IN ('scheduled', 'pending', 'processing')",
+        [userId],
+        (err, row) => resolve(row ? row.cnt : 0)
+      );
+    });
+
+    const lastScheduledTime = new Date(lastPost.scheduled_at).getTime();
+    const timeDiffMs = lastScheduledTime - Date.now();
+    const isTimeUrgent = timeDiffMs < 12 * 60 * 60 * 1000; // 12시간 미만
+
+    // 3. 조건 만족 시 (남은 예약이 1개 이하이거나 마지막 예약 시간이 12시간 미만으로 남았을 때)
+    if (remainingCount <= 1 || isTimeUrgent) {
+      emitLog('info', '[스케줄러] 키워드 대기열 소진이 감지되어 다음 날 분량(3개)을 7시간 간격으로 자동 연장 생성합니다.', userId);
+
+      // 고정 키워드 파싱 (태그 필드의 첫 번째 요소)
+      let fixedKeyword = '';
+      if (lastPost.tags) {
+        const parsedTags = lastPost.tags.split(',').map(t => t.trim()).filter(Boolean);
+        if (parsedTags.length > 0) {
+          fixedKeyword = parsedTags[0];
+        }
+      }
+      if (!fixedKeyword) {
+        fixedKeyword = lastPost.keyword; // 태그가 없을 경우 이전 키워드를 고정 키워드로 백업
+      }
+
+      // AI 엔진 설정 획득 (Ollama 또는 Gemini)
+      const engine = lastPost.engine || 'gemini';
+      let aiConfig = null;
+
+      if (engine === 'ollama') {
+        const endpoint = await new Promise((resolve) => {
+          db.get("SELECT value FROM settings WHERE user_id = ? AND key = 'ollama_endpoint'", [userId], (err, row) => {
+            resolve(row ? row.value : 'http://localhost:11434');
+          });
+        });
+        const model = await new Promise((resolve) => {
+          db.get("SELECT value FROM settings WHERE user_id = ? AND key = 'ollama_model'", [userId], (err, row) => {
+            resolve(row ? row.value : 'llama3');
+          });
+        });
+        aiConfig = { endpoint, model };
+      } else {
+        // Gemini
+        let apiKey = await getGlobalSetting('master_gemini_api_key');
+        if (!apiKey || apiKey === 'YOUR_KEY_HERE') {
+          apiKey = await new Promise((resolve) => {
+            db.get(
+              "SELECT value FROM settings WHERE (user_id = ? OR user_id IS NULL) AND key = 'gemini_api_key' ORDER BY user_id DESC LIMIT 1",
+              [userId],
+              (err, row) => {
+                if (err || !row || !row.value) return resolve(null);
+                try {
+                  resolve(decrypt(row.value));
+                } catch {
+                  resolve(null);
+                }
+              },
+            );
+          });
+        }
+        if (!apiKey) {
+          emitLog('error', '[자동 연장] Gemini API 키가 없어 키워드 대기열 연장에 실패했습니다.', userId);
+          return;
+        }
+        const model = await new Promise((resolve) => {
+          db.get("SELECT value FROM settings WHERE user_id = ? AND key = 'gemini_model'", [userId], (err, row) => {
+            resolve(row ? row.value : 'auto');
+          });
+        });
+        aiConfig = { apiKey, model };
+      }
+
+      let baseTime = lastScheduledTime;
+      const intervalMs = 7 * 60 * 60 * 1000; // 7시간 고정 간격
+      let previousTitle = lastPost.title;
+      let previousContent = lastPost.content;
+
+      for (let step = 0; step < 3; step++) {
+        baseTime += intervalMs;
+        const nextScheduledAt = new Date(baseTime).toISOString();
+        let currentKeyword = '';
+
+        if (step === 0) {
+          // 1회차: 고정 키워드
+          currentKeyword = fixedKeyword;
+        } else {
+          // 2, 3회차: 직전 글 기반 AI 자동 연관 키워드 추출
+          try {
+            currentKeyword = await generateNextKeyword(engine, aiConfig, previousTitle, previousContent);
+          } catch (e) {
+            console.error('[자동 연장] 연관 키워드 추출 오류', e);
+          }
+          if (!currentKeyword) {
+            currentKeyword = fixedKeyword; // fallback
+          }
+        }
+
+        emitLog('info', `[자동 연장] ${step + 1}회차 원고 생성 중 - 키워드: "${currentKeyword}"`, userId);
+
+        try {
+          // 원고 생성
+          const contentResult = await generateContent(engine, aiConfig, currentKeyword);
+          
+          let generatedTags = lastPost.tags || '';
+          if (engine !== 'ollama' && aiConfig.apiKey) {
+            try {
+              generatedTags = await generateTagsWithGemini(
+                aiConfig.apiKey,
+                currentKeyword,
+                contentResult.title,
+                contentResult.content,
+              );
+            } catch (e) {
+              console.error('[자동 연장] 태그 생성 오류', e);
+            }
+          }
+
+          // DB에 예약글로 삽입
+          await new Promise((resolve, reject) => {
+            db.run(
+              "INSERT INTO posts (user_id, account_id, title, content, image_url, headless, scheduled_at, status, post_type, keyword, tags, campaign_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 'keyword', ?, ?, ?)",
+              [
+                userId,
+                null, // 라운드로빈 적용을 위한 null
+                contentResult.title,
+                contentResult.content,
+                lastPost.image_url || null, // 이전 설정 이미지 상속
+                lastPost.headless || 0,
+                nextScheduledAt,
+                currentKeyword,
+                generatedTags,
+                lastPost.campaign_id
+              ],
+              (err) => err ? reject(err) : resolve()
+            );
+          });
+
+          previousTitle = contentResult.title;
+          previousContent = contentResult.content;
+          emitLog('success', `[자동 연장] ${step + 1}회차 예약 등록 성공 - 예약시각: ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`, userId);
+        } catch (err) {
+          emitLog('error', `[자동 연장] ${step + 1}회차 예약 생성 실패: ${err.message}`, userId);
+          // 실패하더라도 루프는 이어서 진행하되 이전 Title/Content는 백업값 유지
+        }
+      }
+
+      if (io) io.emit('posts-updated');
+    }
+  } catch (outerErr) {
+    emitLog('error', `[자동 연장] 대기열 연장 프로세스 중 예외 발생: ${outerErr.message}`, userId);
   }
 }
