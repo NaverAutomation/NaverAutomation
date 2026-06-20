@@ -1,6 +1,6 @@
 {
   "name": "naver-auto",
-  "version": "0.3.336",
+  "version": "0.3.337",
   "description": "Naver Blog Automation with AI",
   "type": "module",
   "main": "src/main.js",
