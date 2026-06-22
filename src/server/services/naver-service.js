@@ -197,13 +197,15 @@ export async function postToNaver(account, post, options = {}) {
   const { onProgress } = options;
 
   if (!post.tags || post.tags.trim() === '') {
-    post.tags = extractTagsFromContent(post.title, post.content);
-    if (onProgress && post.tags) {
-      onProgress(
-        'info',
-        `[태그 자동 생성] 본문과 관련된 단어 5개를 태그로 자동 적용했습니다: ${post.tags}`,
-      );
-    }
+    // [비활성화] 네이버 포스팅 시 본문에서 단어를 추출하여 태그 5개를 자동 생성하는 기능 주석 처리
+    // post.tags = extractTagsFromContent(post.title, post.content);
+    // if (onProgress && post.tags) {
+    //   onProgress(
+    //     'info',
+    //     `[태그 자동 생성] 본문과 관련된 단어 5개를 태그로 자동 적용했습니다: ${post.tags}`,
+    //   );
+    // }
+    post.tags = '';
   }
 
   try {

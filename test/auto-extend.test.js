@@ -120,7 +120,7 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
     // campaign_id 및 tags가 상속되었는지 검증
     for (let i = 1; i <= 3; i++) {
       expect(rows[i].campaign_id).toBe(12345);
-      expect(rows[i].tags).toBe('태그1,태그2'); // generateTagsWithGemini 가 반환한 값 상속
+      expect(rows[i].tags).toBe('소액결제 팁, 금융'); // 기존 태그 유지 상속
     }
   });
 

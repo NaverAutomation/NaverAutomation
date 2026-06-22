@@ -360,12 +360,14 @@ export async function processScheduledPosts() {
                         { apiKey, model: geminiModel },
                         post.keyword,
                       );
-                      const newTags = await generateTagsWithGemini(
-                        apiKey,
-                        post.keyword,
-                        newContent.title,
-                        newContent.content,
-                      );
+                      // [비활성화] 재발행 시 AI 태그 생성 기능 주석 처리 및 기존 태그 유지
+                      // const newTags = await generateTagsWithGemini(
+                      //   apiKey,
+                      //   post.keyword,
+                      //   newContent.title,
+                      //   newContent.content,
+                      // );
+                      const newTags = post.tags || '';
 
                       await new Promise((resolve, reject) => {
                         db.run(
@@ -564,18 +566,19 @@ export async function checkAndExtendKeywordQueue(userId) {
           const contentResult = await generateContent(engine, aiConfig, currentKeyword);
           
           let generatedTags = lastPost.tags || '';
-          if (engine !== 'ollama' && aiConfig.apiKey) {
-            try {
-              generatedTags = await generateTagsWithGemini(
-                aiConfig.apiKey,
-                currentKeyword,
-                contentResult.title,
-                contentResult.content,
-              );
-            } catch (e) {
-              console.error('[자동 연장] 태그 생성 오류', e);
-            }
-          }
+          // [비활성화] 자동 연장 시 AI 태그 생성 기능 주석 처리 및 기존 태그 유지
+          // if (engine !== 'ollama' && aiConfig.apiKey) {
+          //   try {
+          //     generatedTags = await generateTagsWithGemini(
+          //       aiConfig.apiKey,
+          //       currentKeyword,
+          //       contentResult.title,
+          //       contentResult.content,
+          //     );
+          //   } catch (e) {
+          //     console.error('[자동 연장] 태그 생성 오류', e);
+          //   }
+          // }
 
           // DB에 예약글로 삽입
           await new Promise((resolve, reject) => {
