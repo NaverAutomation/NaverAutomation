@@ -38,26 +38,18 @@ async function loginToNaver(page, account) {
   console.log('Navigating to Naver login page...');
   await page.goto('https://nid.naver.com/nidlogin.login', { waitUntil: 'domcontentloaded' });
 
-  console.log('Entering ID/PW using anti-captcha evasion technique...');
+  console.log('Entering ID/PW using keyboard.type()...');
   await page.locator('#id').click();
-  await page.evaluate((id) => {
-    const el = document.querySelector('#id');
-    if (el) {
-      el.focus();
-      document.execCommand('insertText', false, id);
-    }
-  }, account.naver_id);
+  await page.keyboard.press('Control+A');
+  await page.keyboard.press('Delete');
+  await page.keyboard.type(account.naver_id, { delay: 30 + Math.random() * 50 });
 
   await page.waitForTimeout(Math.random() * 200 + 100);
 
   await page.locator('#pw').click();
-  await page.evaluate((pw) => {
-    const el = document.querySelector('#pw');
-    if (el) {
-      el.focus();
-      document.execCommand('insertText', false, pw);
-    }
-  }, account.naver_pw);
+  await page.keyboard.press('Control+A');
+  await page.keyboard.press('Delete');
+  await page.keyboard.type(account.naver_pw, { delay: 30 + Math.random() * 50 });
 
   await page.waitForTimeout(Math.random() * 200 + 100);
   await page.click('.btn_login');
