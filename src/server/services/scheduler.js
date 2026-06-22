@@ -472,7 +472,7 @@ export async function checkAndExtendKeywordQueue(userId) {
     const isTimeUrgent = timeDiffMs < 12 * 60 * 60 * 1000; // 12시간 미만
 
     // 3. 조건 만족 시 (남은 예약이 1개 이하이거나 마지막 예약 시간이 12시간 미만으로 남았을 때)
-    if (remainingCount <= 1 || isTimeUrgent) {
+    if (remainingCount > 0 && (remainingCount === 1 || isTimeUrgent)) {
       emitLog('info', '[스케줄러] 키워드 대기열 소진이 감지되어 다음 날 분량(3개)을 7시간 간격으로 자동 연장 생성합니다.', userId);
 
       // 고정 키워드 파싱 (태그 필드의 첫 번째 요소)

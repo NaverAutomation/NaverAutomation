@@ -161,4 +161,29 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
 
     expect(rows.length).toBe(5);
   });
+
+  it('남은 예약이 0개인 경우 대기열을 연장하지 않는다', async () => {
+    // 과거 완료 건(published) 삽입
+    await new Promise((resolve) => {
+      db.run(
+        "INSERT INTO posts (user_id, title, content, scheduled_at, status, post_type, keyword, tags, campaign_id) VALUES (?, '과거 제목', '과거 본문', ?, 'published', 'keyword', '소액결제 팁', '소액결제 팁, 금융', 12345)",
+        [userId, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()],
+        (err) => {
+          if (err) console.error('INSERT ERROR 6:', err);
+          resolve();
+        }
+      );
+    });
+
+    // 실행
+    await checkAndExtendKeywordQueue(userId);
+
+    // DB 검증: 추가 생성된 건이 없어야 함 (총 1개 유지 - 과거 완료 건만 있음)
+    const rows = await new Promise((resolve) => {
+      db.all('SELECT * FROM posts WHERE user_id = ?', [userId], (err, rows) => resolve(rows));
+    });
+
+    expect(rows.length).toBe(1);
+    expect(rows[0].status).toBe('published');
+  });
 });
