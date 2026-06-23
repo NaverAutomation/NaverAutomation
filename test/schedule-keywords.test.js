@@ -10,15 +10,6 @@ vi.mock('../src/server/services/ai-service.js', () => ({
   generateTagsWithGemini: vi.fn().mockResolvedValue('테스트,태그'),
   generateNextKeyword: vi.fn().mockResolvedValue('테스트 연관 키워드'),
 }));
-
-// openai-service 모킹
-vi.mock('../src/server/services/openai-service.js', () => ({
-  generateContent: vi.fn().mockResolvedValue({
-    title: '테스트용 AI 제목',
-    content: '테스트용 AI 본문 내용입니다.',
-  }),
-}));
-
 // supabase 모킹
 vi.mock('../src/server/utils/supabase.js', () => ({
   getGlobalSetting: vi.fn().mockResolvedValue('MOCK_GEMINI_KEY'),
