@@ -283,7 +283,10 @@ export async function generateNextKeywordWithGemini(apiKey, title, content) {
 `;
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    return response.text().trim().replace(/^[^a-zA-Z0-9가-힣\s]+|[^a-zA-Z0-9가-힣\s]+$/g, '');
+    return response
+      .text()
+      .trim()
+      .replace(/^[^a-zA-Z0-9가-힣\s]+|[^a-zA-Z0-9가-힣\s]+$/g, '');
   } catch (error) {
     console.error('Gemini Next Keyword Generation Error:', error);
     return '';

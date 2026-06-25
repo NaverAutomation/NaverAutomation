@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { searchPexelsImages } from '../src/server/services/pexels-service.js';
 
 describe('searchPexelsImages', () => {
@@ -32,7 +32,7 @@ describe('searchPexelsImages', () => {
     // Verify fetch was called with apiPerPage = 40 (Math.max(4 * 10, 40))
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.stringContaining('per_page=40'),
-      expect.any(Object)
+      expect.any(Object),
     );
 
     // Verify the return size is exactly 4

@@ -28,7 +28,9 @@ export async function searchPexelsImages(apiKey, query, perPage = 4) {
   const timeoutId = setTimeout(() => controller.abort(), 8000);
 
   try {
-    console.log(`[Pexels] Searching images for query: "${query}" (perPage: ${perPage}, API perPage: ${apiPerPage})`);
+    console.log(
+      `[Pexels] Searching images for query: "${query}" (perPage: ${perPage}, API perPage: ${apiPerPage})`,
+    );
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -53,7 +55,9 @@ export async function searchPexelsImages(apiKey, query, perPage = 4) {
       const urls = selectedPhotos
         .map((photo) => photo.src?.large || photo.src?.medium || photo.src?.original)
         .filter(Boolean);
-      console.log(`[Pexels] Selected ${urls.length} diverse images out of ${data.photos.length} found.`);
+      console.log(
+        `[Pexels] Selected ${urls.length} diverse images out of ${data.photos.length} found.`,
+      );
       return urls;
     }
 
@@ -72,7 +76,7 @@ export async function searchPexelsImages(apiKey, query, perPage = 4) {
 
 /**
  * 배열을 무작위로 섞는 Fisher-Yates 셔플 함수
- * @param {Array} array 
+ * @param {Array} array
  * @returns {Array} 섞인 배열
  */
 function shuffleArray(array) {

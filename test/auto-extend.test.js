@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import db from '../src/server/db/database.js';
-import { checkAndExtendKeywordQueue } from '../src/server/services/scheduler.js';
 import * as aiService from '../src/server/services/ai-service.js';
+import { checkAndExtendKeywordQueue } from '../src/server/services/scheduler.js';
 
 // ai-service 모킹
 vi.mock('../src/server/services/ai-service.js', () => ({
@@ -43,7 +43,7 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
         (err) => {
           if (err) console.error('INSERT ERROR 1:', err);
           resolve();
-        }
+        },
       );
     });
 
@@ -54,7 +54,7 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
         (err) => {
           if (err) console.error('INSERT ERROR 2:', err);
           resolve();
-        }
+        },
       );
     });
 
@@ -80,7 +80,7 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
         (err) => {
           if (err) console.error('INSERT ERROR 3:', err);
           resolve();
-        }
+        },
       );
     });
 
@@ -89,10 +89,14 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
 
     // DB 검증: 기존 1개 + 신규 3개 = 총 4개여야 함
     const rows = await new Promise((resolve) => {
-      db.all('SELECT * FROM posts WHERE user_id = ? ORDER BY scheduled_at ASC', [userId], (err, rows) => {
-        if (err) console.error('SELECT ERROR 1:', err);
-        resolve(rows);
-      });
+      db.all(
+        'SELECT * FROM posts WHERE user_id = ? ORDER BY scheduled_at ASC',
+        [userId],
+        (err, rows) => {
+          if (err) console.error('SELECT ERROR 1:', err);
+          resolve(rows);
+        },
+      );
     });
 
     expect(rows.length).toBe(4);
@@ -136,7 +140,7 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
         (err) => {
           if (err) console.error('INSERT ERROR 4:', err);
           resolve();
-        }
+        },
       );
     });
 
@@ -147,7 +151,7 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
         (err) => {
           if (err) console.error('INSERT ERROR 5:', err);
           resolve();
-        }
+        },
       );
     });
 
@@ -156,7 +160,11 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
 
     // DB 검증: 기존 2개 + 신규 3개 = 총 5개여야 함
     const rows = await new Promise((resolve) => {
-      db.all('SELECT * FROM posts WHERE user_id = ? ORDER BY scheduled_at ASC', [userId], (err, rows) => resolve(rows));
+      db.all(
+        'SELECT * FROM posts WHERE user_id = ? ORDER BY scheduled_at ASC',
+        [userId],
+        (err, rows) => resolve(rows),
+      );
     });
 
     expect(rows.length).toBe(5);
@@ -171,7 +179,7 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
         (err) => {
           if (err) console.error('INSERT ERROR 6:', err);
           resolve();
-        }
+        },
       );
     });
 
