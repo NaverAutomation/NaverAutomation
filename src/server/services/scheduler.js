@@ -1,7 +1,7 @@
 import db from '../db/database.js';
 import { decrypt } from '../utils/crypto.js';
 import { getGlobalSetting } from '../utils/supabase.js';
-import { generateContent, generateTagsWithGemini, generateNextKeyword } from './ai-service.js';
+import { generateContent, generateNextKeyword, generateTagsWithGemini } from './ai-service.js';
 import { postToNaver } from './naver-service.js';
 
 function cleanupOldPublishedPosts(userId) {
@@ -159,20 +159,24 @@ export async function processScheduledPosts() {
   try {
     // 0. 각 유저별 키워드 대기열 자동 꼬리물기 연장 체크
     await new Promise((resolve) => {
-      db.all("SELECT DISTINCT user_id FROM posts WHERE status IN ('scheduled', 'pending', 'processing')", [], async (err, rows) => {
-        if (!err && rows) {
-          for (const row of rows) {
-            if (row.user_id) {
-              try {
-                await checkAndExtendKeywordQueue(row.user_id);
-              } catch (e) {
-                console.error(`[자동 연장] 유저 ${row.user_id} 대기열 연장 실패:`, e);
+      db.all(
+        "SELECT DISTINCT user_id FROM posts WHERE status IN ('scheduled', 'pending', 'processing')",
+        [],
+        async (err, rows) => {
+          if (!err && rows) {
+            for (const row of rows) {
+              if (row.user_id) {
+                try {
+                  await checkAndExtendKeywordQueue(row.user_id);
+                } catch (e) {
+                  console.error(`[자동 연장] 유저 ${row.user_id} 대기열 연장 실패:`, e);
+                }
               }
             }
           }
-        }
-        resolve();
-      });
+          resolve();
+        },
+      );
     });
 
     // 10분 이상 stuck된 processing 포스트가 있다면 failed 처리하여 무한 대기 방지
@@ -298,7 +302,7 @@ export async function processScheduledPosts() {
                 },
               );
               db.run(
-                'UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?',
+                'UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ?, login_fail_count = 0 WHERE id = ?',
                 [new Date().toISOString().split('T')[0], account.id],
                 () => {
                   if (io) io.emit('posts-updated');
@@ -420,10 +424,28 @@ export async function processScheduledPosts() {
                 }
               }
             } else {
-              db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id], () => {
-                if (io) io.emit('posts-updated');
-              });
-              emitLog('error', `예약 포스팅 실패: ${postResult.message}`, post.user_id);
+              const failCount = postResult.failCount || 0;
+              if (postResult.isLoginFailure && failCount < 5) {
+                const nextRetryTime = new Date(Date.now() + 3 * 60 * 1000).toISOString();
+                db.run(
+                  "UPDATE posts SET status = 'scheduled', scheduled_at = ? WHERE id = ?",
+                  [nextRetryTime, post.id],
+                  () => {
+                    if (io) io.emit('posts-updated');
+                  },
+                );
+                emitLog(
+                  'warn',
+                  `[로그인 실패] 계정 로그인 실패로 3분 뒤 재발행을 시도합니다. (누적 실패: ${failCount}/5) → 예정 시각: ${new Date(nextRetryTime).toLocaleString('ko-KR')}`,
+                  post.user_id,
+                );
+              } else {
+                db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id], () => {
+                  if (io) io.emit('posts-updated');
+                });
+                const reason = postResult.isLoginFailure ? ' (계정 일시정지)' : '';
+                emitLog('error', `예약 포스팅 실패${reason}: ${postResult.message}`, post.user_id);
+              }
             }
           } catch (error) {
             db.run("UPDATE posts SET status = 'failed' WHERE id = ?", [post.id], () => {
@@ -452,7 +474,7 @@ export async function checkAndExtendKeywordQueue(userId) {
       db.get(
         "SELECT * FROM posts WHERE user_id = ? AND post_type = 'keyword' ORDER BY scheduled_at DESC LIMIT 1",
         [userId],
-        (err, row) => resolve(row || null)
+        (err, row) => resolve(row || null),
       );
     });
 
@@ -463,7 +485,7 @@ export async function checkAndExtendKeywordQueue(userId) {
       db.get(
         "SELECT COUNT(*) as cnt FROM posts WHERE user_id = ? AND post_type = 'keyword' AND status IN ('scheduled', 'pending', 'processing')",
         [userId],
-        (err, row) => resolve(row ? row.cnt : 0)
+        (err, row) => resolve(row ? row.cnt : 0),
       );
     });
 
@@ -473,12 +495,19 @@ export async function checkAndExtendKeywordQueue(userId) {
 
     // 3. 조건 만족 시 (남은 예약이 1개 이하이거나 마지막 예약 시간이 12시간 미만으로 남았을 때)
     if (remainingCount > 0 && (remainingCount === 1 || isTimeUrgent)) {
-      emitLog('info', '[스케줄러] 키워드 대기열 소진이 감지되어 다음 날 분량(3개)을 7시간 간격으로 자동 연장 생성합니다.', userId);
+      emitLog(
+        'info',
+        '[스케줄러] 키워드 대기열 소진이 감지되어 다음 날 분량(3개)을 7시간 간격으로 자동 연장 생성합니다.',
+        userId,
+      );
 
       // 고정 키워드 파싱 (태그 필드의 첫 번째 요소)
       let fixedKeyword = '';
       if (lastPost.tags) {
-        const parsedTags = lastPost.tags.split(',').map(t => t.trim()).filter(Boolean);
+        const parsedTags = lastPost.tags
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean);
         if (parsedTags.length > 0) {
           fixedKeyword = parsedTags[0];
         }
@@ -493,14 +522,22 @@ export async function checkAndExtendKeywordQueue(userId) {
 
       if (engine === 'ollama') {
         const endpoint = await new Promise((resolve) => {
-          db.get("SELECT value FROM settings WHERE user_id = ? AND key = 'ollama_endpoint'", [userId], (err, row) => {
-            resolve(row ? row.value : 'http://localhost:11434');
-          });
+          db.get(
+            "SELECT value FROM settings WHERE user_id = ? AND key = 'ollama_endpoint'",
+            [userId],
+            (err, row) => {
+              resolve(row ? row.value : 'http://localhost:11434');
+            },
+          );
         });
         const model = await new Promise((resolve) => {
-          db.get("SELECT value FROM settings WHERE user_id = ? AND key = 'ollama_model'", [userId], (err, row) => {
-            resolve(row ? row.value : 'llama3');
-          });
+          db.get(
+            "SELECT value FROM settings WHERE user_id = ? AND key = 'ollama_model'",
+            [userId],
+            (err, row) => {
+              resolve(row ? row.value : 'llama3');
+            },
+          );
         });
         aiConfig = { endpoint, model };
       } else {
@@ -523,13 +560,21 @@ export async function checkAndExtendKeywordQueue(userId) {
           });
         }
         if (!apiKey) {
-          emitLog('error', '[자동 연장] Gemini API 키가 없어 키워드 대기열 연장에 실패했습니다.', userId);
+          emitLog(
+            'error',
+            '[자동 연장] Gemini API 키가 없어 키워드 대기열 연장에 실패했습니다.',
+            userId,
+          );
           return;
         }
         const model = await new Promise((resolve) => {
-          db.get("SELECT value FROM settings WHERE user_id = ? AND key = 'gemini_model'", [userId], (err, row) => {
-            resolve(row ? row.value : 'auto');
-          });
+          db.get(
+            "SELECT value FROM settings WHERE user_id = ? AND key = 'gemini_model'",
+            [userId],
+            (err, row) => {
+              resolve(row ? row.value : 'auto');
+            },
+          );
         });
         aiConfig = { apiKey, model };
       }
@@ -550,7 +595,12 @@ export async function checkAndExtendKeywordQueue(userId) {
         } else {
           // 2, 3회차: 직전 글 기반 AI 자동 연관 키워드 추출
           try {
-            currentKeyword = await generateNextKeyword(engine, aiConfig, previousTitle, previousContent);
+            currentKeyword = await generateNextKeyword(
+              engine,
+              aiConfig,
+              previousTitle,
+              previousContent,
+            );
           } catch (e) {
             console.error('[자동 연장] 연관 키워드 추출 오류', e);
           }
@@ -559,13 +609,17 @@ export async function checkAndExtendKeywordQueue(userId) {
           }
         }
 
-        emitLog('info', `[자동 연장] ${step + 1}회차 원고 생성 중 - 키워드: "${currentKeyword}"`, userId);
+        emitLog(
+          'info',
+          `[자동 연장] ${step + 1}회차 원고 생성 중 - 키워드: "${currentKeyword}"`,
+          userId,
+        );
 
         try {
           // 원고 생성
           const contentResult = await generateContent(engine, aiConfig, currentKeyword);
-          
-          let generatedTags = lastPost.tags || '';
+
+          const generatedTags = lastPost.tags || '';
           // [비활성화] 자동 연장 시 AI 태그 생성 기능 주석 처리 및 기존 태그 유지
           // if (engine !== 'ollama' && aiConfig.apiKey) {
           //   try {
@@ -594,15 +648,19 @@ export async function checkAndExtendKeywordQueue(userId) {
                 nextScheduledAt,
                 currentKeyword,
                 generatedTags,
-                lastPost.campaign_id
+                lastPost.campaign_id,
               ],
-              (err) => err ? reject(err) : resolve()
+              (err) => (err ? reject(err) : resolve()),
             );
           });
 
           previousTitle = contentResult.title;
           previousContent = contentResult.content;
-          emitLog('success', `[자동 연장] ${step + 1}회차 예약 등록 성공 - 예약시각: ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`, userId);
+          emitLog(
+            'success',
+            `[자동 연장] ${step + 1}회차 예약 등록 성공 - 예약시각: ${new Date(nextScheduledAt).toLocaleString('ko-KR')}`,
+            userId,
+          );
         } catch (err) {
           emitLog('error', `[자동 연장] ${step + 1}회차 예약 생성 실패: ${err.message}`, userId);
           // 실패하더라도 루프는 이어서 진행하되 이전 Title/Content는 백업값 유지

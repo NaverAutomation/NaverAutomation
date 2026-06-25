@@ -133,14 +133,16 @@ router.patch('/accounts/:id/status', (req, res) => {
   if (!['active', 'paused'].includes(status)) {
     return res.status(400).json({ error: 'status는 active 또는 paused여야 합니다.' });
   }
-  db.run(
-    'UPDATE accounts SET status = ? WHERE id = ? AND user_id = ?',
-    [status, req.params.id, req.user.id],
-    (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ success: true, status });
-    },
-  );
+
+  const query =
+    status === 'active'
+      ? 'UPDATE accounts SET status = ?, login_fail_count = 0 WHERE id = ? AND user_id = ?'
+      : 'UPDATE accounts SET status = ? WHERE id = ? AND user_id = ?';
+
+  db.run(query, [status, req.params.id, req.user.id], (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true, status });
+  });
 });
 
 // ─────────────────────────────────────────────
@@ -971,7 +973,7 @@ router.post('/post', validateBody(createPostSchema), async (req, res) => {
     if (result.success) {
       // 성공 시 계정 카운트 및 순서 업데이트
       db.run(
-        'UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ? WHERE id = ?',
+        'UPDATE accounts SET daily_post_count = daily_post_count + 1, round_robin_order = round_robin_order + 1, last_post_date = ?, login_fail_count = 0 WHERE id = ?',
         [new Date().toISOString().split('T')[0], account.id],
       );
       cleanupOldPublishedPosts(req.user.id);

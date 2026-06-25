@@ -264,6 +264,22 @@ export async function postToNaver(account, post, options = {}) {
       if (onProgress) onProgress('info', '네이버 로그인 시도 중...');
       const realBlogId = await loginToNaver(page, account);
 
+      // 로그인 성공 시 실패 횟수 초기화
+      try {
+        await new Promise((resolve, reject) => {
+          db.run(
+            'UPDATE accounts SET login_fail_count = 0 WHERE naver_id = ? AND user_id = ?',
+            [account.naver_id, account.user_id || post.user_id],
+            (dbErr) => {
+              if (dbErr) reject(dbErr);
+              else resolve();
+            },
+          );
+        });
+      } catch (dbErr) {
+        console.error('Failed to reset login_fail_count:', dbErr.message);
+      }
+
       if (onProgress) onProgress('info', '블로그 글쓰기 페이지 진입 중...');
       console.log(`Navigating to blog write page for ${realBlogId}...`);
       await page.goto(`https://blog.naver.com/${realBlogId}?Redirect=Write`, {
@@ -414,23 +430,33 @@ export async function postToNaver(account, post, options = {}) {
   } catch (error) {
     console.error('Naver posting error:', error);
 
-    const isCriticalLoginFailure =
-      error.message?.includes('자동 로그인 실패(비밀번호 오류)') ||
-      error.message?.includes('자동 로그인 실패(캡차 요구)') ||
-      error.message?.includes('보호조치(잠금)');
+    const isLoginFailure =
+      error.message?.includes('자동 로그인 실패') || error.message?.includes('보호조치(잠금)');
 
-    if (isCriticalLoginFailure) {
+    if (isLoginFailure) {
       try {
+        // 1. 현재 실패 횟수 조회
+        const currentCount = await new Promise((resolve) => {
+          db.get(
+            'SELECT login_fail_count FROM accounts WHERE naver_id = ? AND user_id = ?',
+            [account.naver_id, account.user_id || post.user_id],
+            (dbErr, row) => {
+              if (dbErr || !row) resolve(0);
+              else resolve(row.login_fail_count || 0);
+            },
+          );
+        });
+
+        const newCount = currentCount + 1;
+
+        // 2. 실패 횟수 업데이트
         await new Promise((resolve, reject) => {
           db.run(
-            "UPDATE accounts SET status = 'paused' WHERE naver_id = ? AND user_id = ?",
-            [account.naver_id, post.user_id],
+            'UPDATE accounts SET login_fail_count = ? WHERE naver_id = ? AND user_id = ?',
+            [newCount, account.naver_id, post.user_id],
             (dbErr) => {
-              if (dbErr) {
-                reject(dbErr);
-              } else {
-                resolve();
-              }
+              if (dbErr) reject(dbErr);
+              else resolve();
             },
           );
         });
@@ -444,18 +470,46 @@ export async function postToNaver(account, post, options = {}) {
           reason = '계정 보호조치(잠금)';
         }
 
-        if (onProgress) {
-          onProgress(
-            'warn',
-            `[계정 일시정지] ${reason} 감지로 계정(${account.naver_id})을 일시정지 처리했습니다.`,
-          );
+        if (newCount >= 5) {
+          // 3. 5회 연속 실패 시 계정 일시정지
+          await new Promise((resolve, reject) => {
+            db.run(
+              "UPDATE accounts SET status = 'paused' WHERE naver_id = ? AND user_id = ?",
+              [account.naver_id, post.user_id],
+              (dbErr) => {
+                if (dbErr) reject(dbErr);
+                else resolve();
+              },
+            );
+          });
+
+          if (onProgress) {
+            onProgress(
+              'warn',
+              `[계정 일시정지] ${reason} 5회 연속 발생으로 계정(${account.naver_id})을 일시정지 처리했습니다.`,
+            );
+          }
+        } else {
+          if (onProgress) {
+            onProgress(
+              'warn',
+              `[로그인 실패] ${reason} 발생 (누적 실패: ${newCount}/5). 계정을 활성 상태로 유지합니다.`,
+            );
+          }
         }
+
+        return {
+          success: false,
+          message: error.message,
+          isLoginFailure: true,
+          failCount: newCount,
+        };
       } catch (dbErr) {
-        console.error('Failed to update account status to paused:', dbErr.message);
+        console.error('Failed to handle login failure:', dbErr.message);
       }
     }
 
-    return { success: false, message: error.message };
+    return { success: false, message: error.message, isLoginFailure: false };
   } finally {
     if (postTimeoutId) {
       clearTimeout(postTimeoutId);

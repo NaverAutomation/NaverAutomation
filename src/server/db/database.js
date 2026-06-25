@@ -27,7 +27,8 @@ function initializeDatabase() {
       status TEXT DEFAULT 'active',
       round_robin_order INTEGER DEFAULT 0,
       daily_post_count INTEGER DEFAULT 0,
-      last_post_date DATE
+      last_post_date DATE,
+      login_fail_count INTEGER DEFAULT 0
     )`,
       (err) => {
         if (err) console.error('Error creating accounts table:', err.message);
@@ -37,6 +38,7 @@ function initializeDatabase() {
           db.run('ALTER TABLE accounts ADD COLUMN user_id TEXT', () => {});
           db.run('ALTER TABLE accounts ADD COLUMN daily_post_count INTEGER DEFAULT 0', () => {});
           db.run('ALTER TABLE accounts ADD COLUMN last_post_date DATE', () => {});
+          db.run('ALTER TABLE accounts ADD COLUMN login_fail_count INTEGER DEFAULT 0', () => {});
         }
       },
     );
@@ -66,6 +68,12 @@ function initializeDatabase() {
         } else {
           // 기존 DB에 컬럼 추가 (순차 실행으로 lock 방지)
           const migrate = async () => {
+            await addColumnIfNotExists('accounts', 'round_robin_order', 'INTEGER DEFAULT 0');
+            await addColumnIfNotExists('accounts', 'user_id', 'TEXT');
+            await addColumnIfNotExists('accounts', 'daily_post_count', 'INTEGER DEFAULT 0');
+            await addColumnIfNotExists('accounts', 'last_post_date', 'DATE');
+            await addColumnIfNotExists('accounts', 'login_fail_count', 'INTEGER DEFAULT 0');
+
             await addColumnIfNotExists('posts', 'user_id', 'TEXT');
             await addColumnIfNotExists('posts', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
             await addColumnIfNotExists('posts', 'scheduled_at', 'DATETIME');
