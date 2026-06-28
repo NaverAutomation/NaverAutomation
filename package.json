@@ -17,7 +17,7 @@
     "package.json"
   ],
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "start": "node src/server/index.js",
@@ -40,7 +40,7 @@
     "electron-updater": "^6.8.9",
     "express": "^5.2.1",
     "open": "^11.0.0",
-    "playwright": "^1.61.0",
+    "playwright": "^1.61.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "socket.io": "^4.8.3",
@@ -48,17 +48,17 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.0",
+    "@biomejs/biome": "2.5.1",
     "@tailwindcss/postcss": "^4.3.1",
-    "@vitejs/plugin-react": "^6.0.2",
-    "autoprefixer": "^10.5.0",
+    "@vitejs/plugin-react": "^6.0.3",
+    "autoprefixer": "^10.5.2",
     "cross-env": "^10.1.0",
-    "daisyui": "^5.5.23",
-    "electron": "^42.4.0",
+    "daisyui": "^5.6.3",
+    "electron": "^42.5.0",
     "electron-builder": "^26.15.3",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.1",
-    "vite": "^8.0.16",
+    "vite": "^8.1.0",
     "vitest": "^4.1.9"
   }
 }
