@@ -146,3 +146,6 @@ vite.config.ts.timestamp-*
 
 # Electron build output
 dist_electron/
+
+# Database file
+naver-auto.db
