@@ -1,7 +1,7 @@
 import db from '../db/database.js';
 import { decrypt } from '../utils/crypto.js';
 import { getGlobalSetting } from '../utils/supabase.js';
-import { generateContent, generateNextKeyword, generateTagsWithGemini } from './ai-service.js';
+import { generateContent, generateNextKeyword } from './ai-service.js';
 import { postToNaver } from './naver-service.js';
 
 function cleanupOldPublishedPosts(userId) {
@@ -474,7 +474,7 @@ export async function checkAndExtendKeywordQueue(userId) {
       db.get(
         "SELECT * FROM posts WHERE user_id = ? AND post_type = 'keyword' ORDER BY scheduled_at DESC LIMIT 1",
         [userId],
-        (err, row) => resolve(row || null),
+        (_err, row) => resolve(row || null),
       );
     });
 
@@ -485,7 +485,7 @@ export async function checkAndExtendKeywordQueue(userId) {
       db.get(
         "SELECT COUNT(*) as cnt FROM posts WHERE user_id = ? AND post_type = 'keyword' AND status IN ('scheduled', 'pending', 'processing')",
         [userId],
-        (err, row) => resolve(row ? row.cnt : 0),
+        (_err, row) => resolve(row ? row.cnt : 0),
       );
     });
 
@@ -525,7 +525,7 @@ export async function checkAndExtendKeywordQueue(userId) {
           db.get(
             "SELECT value FROM settings WHERE user_id = ? AND key = 'ollama_endpoint'",
             [userId],
-            (err, row) => {
+            (_err, row) => {
               resolve(row ? row.value : 'http://localhost:11434');
             },
           );
@@ -534,7 +534,7 @@ export async function checkAndExtendKeywordQueue(userId) {
           db.get(
             "SELECT value FROM settings WHERE user_id = ? AND key = 'ollama_model'",
             [userId],
-            (err, row) => {
+            (_err, row) => {
               resolve(row ? row.value : 'llama3');
             },
           );
@@ -571,7 +571,7 @@ export async function checkAndExtendKeywordQueue(userId) {
           db.get(
             "SELECT value FROM settings WHERE user_id = ? AND key = 'gemini_model'",
             [userId],
-            (err, row) => {
+            (_err, row) => {
               resolve(row ? row.value : 'auto');
             },
           );
