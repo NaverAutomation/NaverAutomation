@@ -2,6 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { apiFetch, parseUtcDate } from '../../utils/api';
 import { Card } from '../common';
 
+const LEVEL_STYLES = {
+  error: 'text-error border-error/50 bg-error/10',
+  success: 'text-success border-success/50 bg-success/10',
+  warn: 'text-warning border-warning/50 bg-warning/10',
+  info: 'text-info border-info/50 bg-info/10',
+};
+
 const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
   const [dbLogs, setDbLogs] = useState([]);
   const logEndRef = useRef(null);
@@ -26,13 +33,6 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
   // 최신 로그가 상단에 오도록 배열을 합친 뒤 뒤집습니다.
   const allLogs = [...dbLogs, ...realtimeLogs].slice(-300).reverse();
 
-  const levelStyles = {
-    error: 'text-error border-error/50 bg-error/10',
-    success: 'text-success border-success/50 bg-success/10',
-    warn: 'text-warning border-warning/50 bg-warning/10',
-    info: 'text-info border-info/50 bg-info/10',
-  };
-
   return (
     <Card className="h-[calc(100vh-140px)] flex flex-col">
       <div className="flex justify-between items-center mb-4 border-b border-base-300 pb-4 shrink-0">
@@ -53,7 +53,7 @@ const LogsTab = React.memo(({ realtimeLogs, setRealtimeLogs }) => {
         ) : (
           <div className="flex flex-col pb-4">
             {allLogs.map((log, i) => {
-              const style = levelStyles[log.level] || levelStyles.info;
+              const style = LEVEL_STYLES[log.level] || LEVEL_STYLES.info;
               const timeStr =
                 parseUtcDate(log.created_at)?.toLocaleTimeString('en-GB', {
                   hour12: false,

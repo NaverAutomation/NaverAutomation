@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 // Auth
 import Login from './components/Login.jsx';
 import { apiFetch } from './utils/api';
@@ -59,13 +59,12 @@ const App = () => {
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [appVersion, setAppVersion] = useState('loading');
   const [latestVersion, setLatestVersion] = useState('loading');
-  const [updaterState, setUpdaterState] = useState({
+  const updaterRef = useRef({
     status: 'idle',
     message: '업데이트 대기 중',
     timestamp: null,
   });
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [manualUpdateRequested, setManualUpdateRequested] = useState(false);
 
   // ── Auth 세션 관리
   useEffect(() => {
@@ -139,11 +138,11 @@ const App = () => {
     if (!api) {
       setAppVersion(WEB_APP_VERSION);
       setLatestVersion(WEB_APP_VERSION);
-      setUpdaterState({
+      updaterRef.current = {
         status: 'browser-mode',
         message: `브라우저 모드입니다. 현재 빌드 버전은 ${WEB_APP_VERSION} 입니다.`,
         timestamp: new Date().toISOString(),
-      });
+      };
       return;
     }
 
@@ -163,24 +162,30 @@ const App = () => {
       .getLastUpdaterStatus()
       .then((status) => {
         if (status?.status) {
-          setUpdaterState(status);
+          updaterRef.current = status;
           setLatestVersion((prev) => resolveLatestVersion(status, prev || 'unknown'));
         }
       })
       .catch(() => {});
 
     const unsubscribe = api.onUpdaterStatus((payload) => {
-      setUpdaterState(payload);
+      updaterRef.current = payload;
       setLatestVersion((prev) => resolveLatestVersion(payload, prev || appVersion || 'unknown'));
+      const status = payload?.status;
       if (
-        payload?.status === 'update-not-available' ||
-        payload?.status === 'error' ||
-        payload?.status === 'dev-mode'
+        status === 'update-not-available' ||
+        status === 'error' ||
+        status === 'dev-mode' ||
+        status === 'browser-mode' ||
+        status === 'update-available' ||
+        status === 'update-downloaded'
       ) {
-        setIsCheckingUpdate(false);
-      }
-      if (payload?.status === 'update-available' || payload?.status === 'update-downloaded') {
-        setIsCheckingUpdate(false);
+        setIsCheckingUpdate((prevChecking) => {
+          if (prevChecking && status === 'update-not-available') {
+            alert('현재 최신 버전입니다.');
+          }
+          return false;
+        });
       }
     });
 
@@ -192,31 +197,6 @@ const App = () => {
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
-
-  useEffect(() => {
-    if (!manualUpdateRequested) {
-      return;
-    }
-
-    if (updaterState.status === 'update-not-available') {
-      alert('현재 최신 버전입니다.');
-      setManualUpdateRequested(false);
-      return;
-    }
-
-    if (
-      updaterState.status === 'update-available' ||
-      updaterState.status === 'error' ||
-      updaterState.status === 'dev-mode' ||
-      updaterState.status === 'browser-mode'
-    ) {
-      setManualUpdateRequested(false);
-    }
-  }, [manualUpdateRequested, updaterState.status]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
 
   const handleManualUpdateCheck = useCallback(async () => {
     const api = window.electronAPI;
@@ -231,12 +211,10 @@ const App = () => {
       return;
     }
 
-    setManualUpdateRequested(true);
     setIsCheckingUpdate(true);
     const result = await api.checkForUpdates();
     if (!result?.ok) {
       setIsCheckingUpdate(false);
-      setManualUpdateRequested(false);
     }
   }, [latestVersion, appVersion]);
 
@@ -453,6 +431,10 @@ const App = () => {
       </main>
     </div>
   );
+};
+
+const handleLogout = async () => {
+  await supabase.auth.signOut();
 };
 
 export default App;

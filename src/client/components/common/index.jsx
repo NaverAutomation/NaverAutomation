@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 
 const EMPTY_STYLE = {};
 
@@ -54,19 +54,20 @@ export const Textarea = React.memo(({ label, className = '', id, ...props }) => 
   );
 });
 
+const V_MAP = {
+  primary: 'btn-primary shadow-primary/30',
+  success: 'btn-success shadow-success/30',
+  danger: 'btn-error shadow-error/30',
+  warning: 'btn-warning shadow-warning/30',
+  secondary: 'btn-neutral shadow-base-content/30',
+};
+
 export const Btn = React.memo(
   ({ children, variant = 'primary', className = '', block = false, type = 'button', ...props }) => {
-    const vMap = {
-      primary: 'btn-primary shadow-primary/30',
-      success: 'btn-success shadow-success/30',
-      danger: 'btn-error shadow-error/30',
-      warning: 'btn-warning shadow-warning/30',
-      secondary: 'btn-neutral shadow-base-content/30',
-    };
     return (
       <button
         type={type}
-        className={`btn shadow-sm hover:shadow-md transition-all ${vMap[variant] || 'btn-primary'} ${block ? 'btn-block' : ''} ${className}`}
+        className={`btn shadow-sm hover:shadow-md transition-all ${V_MAP[variant] || 'btn-primary'} ${block ? 'btn-block' : ''} ${className}`}
         {...props}
       >
         {children}
@@ -75,17 +76,18 @@ export const Btn = React.memo(
   },
 );
 
+const STATUS_MAP = {
+  published: { badge: 'badge-success text-success-content', label: '발행완료' },
+  failed: { badge: 'badge-error text-error-content', label: '실패' },
+  scheduled: { badge: 'badge-info text-info-content', label: '예약됨' },
+  pending: { badge: 'badge-warning text-warning-content', label: '대기중' },
+  processing: { badge: 'badge-primary text-primary-content', label: '처리중' },
+  active: { badge: 'badge-success text-success-content border-success/30', label: '활성' },
+  paused: { badge: 'badge-neutral border-neutral/30', label: '대기' },
+};
+
 export const StatusBadge = React.memo(({ status }) => {
-  const map = {
-    published: { badge: 'badge-success text-success-content', label: '발행완료' },
-    failed: { badge: 'badge-error text-error-content', label: '실패' },
-    scheduled: { badge: 'badge-info text-info-content', label: '예약됨' },
-    pending: { badge: 'badge-warning text-warning-content', label: '대기중' },
-    processing: { badge: 'badge-primary text-primary-content', label: '처리중' },
-    active: { badge: 'badge-success text-success-content border-success/30', label: '활성' },
-    paused: { badge: 'badge-neutral border-neutral/30', label: '대기' },
-  };
-  const s = map[status] || { badge: 'badge-ghost', label: status };
+  const s = STATUS_MAP[status] || { badge: 'badge-ghost', label: status };
   return (
     <span
       className={`badge ${s.badge} font-extrabold px-3 py-2.5 rounded-full text-xs uppercase tracking-wider`}
@@ -96,24 +98,43 @@ export const StatusBadge = React.memo(({ status }) => {
 });
 
 export const Modal = React.memo(({ title, show, onClose, children }) => {
+  const titleId = useId();
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!show) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onCloseRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [show]);
+
   if (!show) return null;
   return (
     <dialog
       className="modal modal-open bg-black/60 backdrop-blur-sm transition-all"
-      onClick={onClose}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose();
-      }}
+      aria-labelledby={titleId}
+      aria-modal="true"
     >
+      <button
+        type="button"
+        className="absolute inset-0 z-0 cursor-default w-full h-full bg-transparent border-none outline-none"
+        onClick={onClose}
+        aria-label="모달 닫기"
+      />
       {/* biome-ignore lint/a11y/noStaticElementInteractions: click propagation prevention */}
       <div
-        className="modal-box w-11/12 max-w-4xl bg-base-200 border border-base-300 shadow-2xl p-0 overflow-hidden"
+        className="modal-box w-11/12 max-w-4xl bg-base-200 border border-base-300 shadow-2xl p-0 overflow-hidden z-10"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
         role="presentation"
       >
         <header className="px-6 py-4 border-b border-base-300 flex justify-between items-center bg-base-300/50">
-          <h3 className="font-extrabold text-xl text-base-content tracking-tight">{title}</h3>
+          <h3 id={titleId} className="font-extrabold text-xl text-base-content tracking-tight">
+            {title}
+          </h3>
           <button
             type="button"
             className="btn btn-sm btn-circle btn-ghost hover:bg-base-content/20"

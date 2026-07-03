@@ -71,39 +71,48 @@ const PendingIcon = () => (
   </svg>
 );
 
-const renderProgressIcons = (
-  publishedCount = 0,
-  activeCount = 0,
-  totalCount = 5,
-  failedCount = 0,
-) => {
-  const icons = [];
+const ProgressIcons = React.memo(
+  ({
+    publishedCount = 0,
+    activeCount = 0,
+    totalCount = 5,
+    failedCount = 0,
+    groupId = 'default',
+  }) => {
+    const icons = [];
 
-  // 성공한 개수만큼 SuccessIcon 추가
-  for (let i = 0; i < publishedCount; i++) {
-    icons.push(<SuccessIcon key={`success-${i}`} />);
-  }
+    // 성공한 개수만큼 SuccessIcon 추가
+    let successIndex = 0;
+    while (successIndex < publishedCount) {
+      icons.push(<SuccessIcon key={`success-${groupId}-${successIndex}`} />);
+      successIndex++;
+    }
 
-  // 실패한 개수만큼 FailedIcon 추가
-  for (let i = 0; i < failedCount; i++) {
-    icons.push(<FailedIcon key={`failed-${i}`} />);
-  }
+    // 실패한 개수만큼 FailedIcon 추가
+    let failedIndex = 0;
+    while (failedIndex < failedCount) {
+      icons.push(<FailedIcon key={`failed-${groupId}-${failedIndex}`} />);
+      failedIndex++;
+    }
 
-  // 대기 중인 개수만큼 PendingIcon 추가
-  for (let i = 0; i < activeCount; i++) {
-    icons.push(<PendingIcon key={`pending-${i}`} />);
-  }
+    // 대기 중인 개수만큼 PendingIcon 추가
+    let pendingIndex = 0;
+    while (pendingIndex < activeCount) {
+      icons.push(<PendingIcon key={`pending-${groupId}-${pendingIndex}`} />);
+      pendingIndex++;
+    }
 
-  return (
-    <div className="flex items-center gap-1 bg-base-200/60 px-2 py-0.5 rounded-md border border-base-300/40">
-      <div className="flex items-center gap-0.5">{icons}</div>
-      <span className="text-[10px] font-bold text-base-content/60 ml-1">
-        ({publishedCount}/{totalCount}){' '}
-        {activeCount === 0 && failedCount === 0 ? '완료' : '예약진행중'}
-      </span>
-    </div>
-  );
-};
+    return (
+      <div className="flex items-center gap-1 bg-base-200/60 px-2 py-0.5 rounded-md border border-base-300/40">
+        <div className="flex items-center gap-0.5">{icons}</div>
+        <span className="text-[10px] font-bold text-base-content/60 ml-1">
+          ({publishedCount}/{totalCount}){' '}
+          {activeCount === 0 && failedCount === 0 ? '완료' : '예약진행중'}
+        </span>
+      </div>
+    );
+  },
+);
 
 const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReusePost }) => {
   // ── 예약 수정 상태 ──
@@ -242,12 +251,13 @@ const QueueTab = React.memo(({ scheduledPosts = [], posts = [], fetchAll, onReus
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                          {renderProgressIcons(
-                            post.published_count,
-                            post.active_count,
-                            post.total_count,
-                            post.failed_count,
-                          )}
+                          <ProgressIcons
+                            publishedCount={post.published_count}
+                            activeCount={post.active_count}
+                            totalCount={post.total_count}
+                            failedCount={post.failed_count}
+                            groupId={post.id}
+                          />
                           <span className="badge badge-secondary badge-xs font-bold">
                             🔑 자동 키워드 일괄
                           </span>

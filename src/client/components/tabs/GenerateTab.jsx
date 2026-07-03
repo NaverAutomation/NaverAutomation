@@ -10,6 +10,83 @@ const applyRandomOffset = (isoString, offsetMin) => {
   return new Date(new Date(isoString).getTime() + offsetMs).toISOString();
 };
 
+// ── 이미지 업로드 헬퍼 (Hoisted outside component) ──
+const handleImageUpload = async (e, setUrlCallback) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (file.size > 5 * 1024 * 1024) {
+    alert('이미지 크기는 5MB 이하여야 합니다.');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const res = await apiFetch('/api/upload', {
+        method: 'POST',
+        body: JSON.stringify({
+          fileName: file.name,
+          base64Data: reader.result,
+        }),
+      });
+      if (res.success && res.url) {
+        setUrlCallback(res.url);
+      } else {
+        alert(`이미지 업로드 실패: ${res.error || '알 수 없는 오류'}`);
+      }
+    } catch (err) {
+      alert(`업로드 오류: ${err.message}`);
+    }
+  };
+  reader.onerror = () => {
+    alert('파일 읽기 오류가 발생했습니다.');
+  };
+  reader.readAsDataURL(file);
+};
+
+// ── 자동 키워드 다중 이미지 업로드 헬퍼 (Hoisted outside component) ──
+const handleMultipleImageUpload = async (e, setListCallback) => {
+  const files = Array.from(e.target.files);
+  if (files.length === 0) return;
+
+  for (const file of files) {
+    if (file.size > 5 * 1024 * 1024) {
+      alert(`이미지 크기는 5MB 이하여야 합니다: ${file.name}`);
+      continue;
+    }
+
+    const reader = new FileReader();
+    await new Promise((resolve) => {
+      reader.onload = async () => {
+        try {
+          const res = await apiFetch('/api/upload', {
+            method: 'POST',
+            body: JSON.stringify({
+              fileName: file.name,
+              base64Data: reader.result,
+            }),
+          });
+          if (res.success && res.url) {
+            setListCallback((prev) => [...prev, res.url]);
+          } else {
+            alert(`이미지 업로드 실패 (${file.name}): ${res.error || '알 수 없는 오류'}`);
+          }
+        } catch (err) {
+          alert(`업로드 오류 (${file.name}): ${err.message}`);
+        } finally {
+          resolve();
+        }
+      };
+      reader.onerror = () => {
+        alert(`파일 읽기 오류가 발생했습니다: ${file.name}`);
+        resolve();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+};
+
 const GenerateTab = React.memo(
   ({ accounts, scheduledPosts = EMPTY_ARRAY, fetchAll, reusedPost, clearReusedPost }) => {
     // ── UI 및 전환 상태 ──
@@ -85,16 +162,20 @@ const GenerateTab = React.memo(
       return result;
     }, [scheduledPosts]);
 
-    // ── 외부 이력 재사용 이벤트 감지 ──
+    // ── 외부 이력 재사용 이벤트 감지 (Render-phase state adjustment & Scroll side-effect) ──
+    const [prevReusedPost, setPrevReusedPost] = useState(null);
+    if (reusedPost && reusedPost !== prevReusedPost) {
+      setPrevReusedPost(reusedPost);
+      setManualTitle(reusedPost.title || '');
+      setManualContent(reusedPost.content || '');
+      setManualImageUrl(reusedPost.image_url || '');
+      setManualTags(reusedPost.tags || '');
+      setActiveSubTab('manual');
+    }
+
     useEffect(() => {
       let timerId = null;
       if (reusedPost) {
-        setManualTitle(reusedPost.title || '');
-        setManualContent(reusedPost.content || '');
-        setManualImageUrl(reusedPost.image_url || '');
-        setManualTags(reusedPost.tags || '');
-        setActiveSubTab('manual');
-
         timerId = setTimeout(() => {
           const composeContainer = document.getElementById('compose-hub-card');
           if (composeContainer) {
@@ -107,41 +188,6 @@ const GenerateTab = React.memo(
         if (timerId) clearTimeout(timerId);
       };
     }, [reusedPost, clearReusedPost]);
-
-    // ── 이미지 업로드 핸들러 ──
-    const handleImageUpload = async (e, setUrlCallback) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      if (file.size > 5 * 1024 * 1024) {
-        alert('이미지 크기는 5MB 이하여야 합니다.');
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const res = await apiFetch('/api/upload', {
-            method: 'POST',
-            body: JSON.stringify({
-              fileName: file.name,
-              base64Data: reader.result,
-            }),
-          });
-          if (res.success && res.url) {
-            setUrlCallback(res.url);
-          } else {
-            alert(`이미지 업로드 실패: ${res.error || '알 수 없는 오류'}`);
-          }
-        } catch (err) {
-          alert(`업로드 오류: ${err.message}`);
-        }
-      };
-      reader.onerror = () => {
-        alert('파일 읽기 오류가 발생했습니다.');
-      };
-      reader.readAsDataURL(file);
-    };
 
     // ── AI 초안 생성 기능 ──
     const handleGenerate = async () => {
@@ -401,55 +447,13 @@ const GenerateTab = React.memo(
       setManualScheduling(false);
     };
 
-    // ── 자동 키워드 다중 이미지 업로드 핸들러 ──
-    const handleMultipleImageUpload = async (e, setListCallback) => {
-      const files = Array.from(e.target.files);
-      if (files.length === 0) return;
-
-      for (const file of files) {
-        if (file.size > 5 * 1024 * 1024) {
-          alert(`이미지 크기는 5MB 이하여야 합니다: ${file.name}`);
-          continue;
-        }
-
-        const reader = new FileReader();
-        await new Promise((resolve) => {
-          reader.onload = async () => {
-            try {
-              const res = await apiFetch('/api/upload', {
-                method: 'POST',
-                body: JSON.stringify({
-                  fileName: file.name,
-                  base64Data: reader.result,
-                }),
-              });
-              if (res.success && res.url) {
-                setListCallback((prev) => [...prev, res.url]);
-              } else {
-                alert(`이미지 업로드 실패 (${file.name}): ${res.error || '알 수 없는 오류'}`);
-              }
-            } catch (err) {
-              alert(`업로드 오류 (${file.name}): ${err.message}`);
-            } finally {
-              resolve();
-            }
-          };
-          reader.onerror = () => {
-            alert(`파일 읽기 오류가 발생했습니다: ${file.name}`);
-            resolve();
-          };
-          reader.readAsDataURL(file);
-        });
-      }
-    };
-
     // ── 자동 키워드 일괄 예약 등록 ──
     const handleKeywordSchedule = async (e) => {
       e.preventDefault();
-      const lines = keywordList
-        .split('\n')
-        .map((k) => k.trim())
-        .filter(Boolean);
+      const lines = keywordList.split('\n').flatMap((k) => {
+        const trimmed = k.trim();
+        return trimmed ? [trimmed] : [];
+      });
       if (lines.length === 0) return alert('키워드를 최소 1개 이상 입력하세요.');
       if (!keywordStartTime) return alert('예약 시작 시간을 설정하세요.');
 

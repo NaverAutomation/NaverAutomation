@@ -68,22 +68,30 @@ function initializeDatabase() {
         } else {
           // 기존 DB에 컬럼 추가 (순차 실행으로 lock 방지)
           const migrate = async () => {
-            await addColumnIfNotExists('accounts', 'round_robin_order', 'INTEGER DEFAULT 0');
-            await addColumnIfNotExists('accounts', 'user_id', 'TEXT');
-            await addColumnIfNotExists('accounts', 'daily_post_count', 'INTEGER DEFAULT 0');
-            await addColumnIfNotExists('accounts', 'last_post_date', 'DATE');
-            await addColumnIfNotExists('accounts', 'login_fail_count', 'INTEGER DEFAULT 0');
-
-            await addColumnIfNotExists('posts', 'user_id', 'TEXT');
-            await addColumnIfNotExists('posts', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
-            await addColumnIfNotExists('posts', 'scheduled_at', 'DATETIME');
-            await addColumnIfNotExists('posts', 'headless', 'INTEGER');
-            await addColumnIfNotExists('posts', 'post_type', "TEXT DEFAULT 'manual'");
-            await addColumnIfNotExists('posts', 'campaign_id', 'INTEGER');
-            await addColumnIfNotExists('posts', 'keyword', 'TEXT');
-            await addColumnIfNotExists('posts', 'tags', 'TEXT');
-            await addColumnIfNotExists('posts', 'republish_interval_ms', 'INTEGER');
-            await addColumnIfNotExists('posts', 'republish_count', 'INTEGER DEFAULT 0');
+            const columns = [
+              ['accounts', 'round_robin_order', 'INTEGER DEFAULT 0'],
+              ['accounts', 'user_id', 'TEXT'],
+              ['accounts', 'daily_post_count', 'INTEGER DEFAULT 0'],
+              ['accounts', 'last_post_date', 'DATE'],
+              ['accounts', 'login_fail_count', 'INTEGER DEFAULT 0'],
+              ['posts', 'user_id', 'TEXT'],
+              ['posts', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP'],
+              ['posts', 'scheduled_at', 'DATETIME'],
+              ['posts', 'headless', 'INTEGER'],
+              ['posts', 'post_type', "TEXT DEFAULT 'manual'"],
+              ['posts', 'campaign_id', 'INTEGER'],
+              ['posts', 'keyword', 'TEXT'],
+              ['posts', 'tags', 'TEXT'],
+              ['posts', 'republish_interval_ms', 'INTEGER'],
+              ['posts', 'republish_count', 'INTEGER DEFAULT 0'],
+            ];
+            const runNext = async (idx) => {
+              if (idx >= columns.length) return;
+              const [table, column, type] = columns[idx];
+              await addColumnIfNotExists(table, column, type);
+              await runNext(idx + 1);
+            };
+            await runNext(0);
           };
           migrate().catch(console.error);
         }

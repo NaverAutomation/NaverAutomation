@@ -261,21 +261,22 @@ export async function getNextRepresentativeImage(userId) {
         if (!Array.isArray(images) || images.length === 0) return resolve(null);
         if (images.length === 1) return resolve(images[0]);
 
-        const rotation = await new Promise((resRot) => {
-          db.get(
-            "SELECT value FROM settings WHERE user_id = ? AND key = 'representative_image_rotation'",
-            [userId],
-            (_, rRow) => resRot(rRow ? rRow.value : 'sequential'),
-          );
-        });
-
-        const lastUsed = await new Promise((resLast) => {
-          db.get(
-            "SELECT value FROM settings WHERE user_id = ? AND key = 'last_used_representative_image'",
-            [userId],
-            (_, lRow) => resLast(lRow ? lRow.value : null),
-          );
-        });
+        const [rotation, lastUsed] = await Promise.all([
+          new Promise((resRot) => {
+            db.get(
+              "SELECT value FROM settings WHERE user_id = ? AND key = 'representative_image_rotation'",
+              [userId],
+              (_, rRow) => resRot(rRow ? rRow.value : 'sequential'),
+            );
+          }),
+          new Promise((resLast) => {
+            db.get(
+              "SELECT value FROM settings WHERE user_id = ? AND key = 'last_used_representative_image'",
+              [userId],
+              (_, lRow) => resLast(lRow ? lRow.value : null),
+            );
+          }),
+        ]);
 
         let selected = null;
         if (rotation === 'random') {
