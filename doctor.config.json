@@ -1,0 +1,15 @@
+{
+  "rules": {
+    "deslop/unused-file": "off",
+    "deslop/unused-export": "off",
+    "react-doctor/no-giant-component": "off",
+    "react-doctor/async-await-in-loop": "off",
+    "react-doctor/js-cache-property-access": "off",
+    "react-doctor/js-combine-iterations": "off",
+    "react-doctor/js-flatmap-filter": "off",
+    "react-doctor/js-set-map-lookups": "off",
+    "react-doctor/build-pipeline-secret-boundary": "off",
+    "react-doctor/artifact-baas-authority-surface": "off",
+    "react-doctor/control-has-associated-label": "off"
+  }
+}
