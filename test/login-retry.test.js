@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import db from '../src/server/db/database.js';
+import { updateAccountStatusOnFailure } from '../src/server/services/naver/naver-login.js';
 import { postToNaver } from '../src/server/services/naver-service.js';
 import { getSchedulerStatus, processScheduledPosts } from '../src/server/services/scheduler.js';
 
@@ -71,12 +72,14 @@ describe('로그인 실패 시 재시도 및 계정 일시정지 통합 테스�
     });
 
     // postToNaver의 실제 DB 업데이트 동작을 모사하는 mock 구현
-    vi.mocked(postToNaver).mockImplementation(async (account, post, options) => {
+    vi.mocked(postToNaver).mockImplementation(async (account, _post, _options) => {
       if (mockPostResult) {
         if (mockPostResult.isLoginFailure) {
           const currentCount = await new Promise((resolve) => {
-            db.get('SELECT login_fail_count FROM accounts WHERE id = ?', [account.id], (err, row) =>
-              resolve(row ? row.login_fail_count || 0 : 0),
+            db.get(
+              'SELECT login_fail_count FROM accounts WHERE id = ?',
+              [account.id],
+              (_err, row) => resolve(row ? row.login_fail_count || 0 : 0),
             );
           });
           const newCount = currentCount + 1;
@@ -133,7 +136,7 @@ describe('로그인 실패 시 재시도 및 계정 일시정지 통합 테스�
 
     // 4. 검증: 포스트가 다시 scheduled 상태이며 scheduled_at이 미래 시점(약 3분 뒤)이어야 함
     const post = await new Promise((resolve) => {
-      db.get('SELECT * FROM posts WHERE id = ?', [postId], (err, row) => resolve(row));
+      db.get('SELECT * FROM posts WHERE id = ?', [postId], (_err, row) => resolve(row));
     });
     expect(post.status).toBe('scheduled');
 
@@ -143,7 +146,7 @@ describe('로그인 실패 시 재시도 및 계정 일시정지 통합 테스�
 
     // 5. 검증: 계정 상태가 여전히 active이며 실패 횟수가 1인지 확인
     const account = await new Promise((resolve) => {
-      db.get('SELECT * FROM accounts WHERE id = ?', [accountId], (err, row) => resolve(row));
+      db.get('SELECT * FROM accounts WHERE id = ?', [accountId], (_err, row) => resolve(row));
     });
     expect(account.status).toBe('active');
     expect(account.login_fail_count).toBe(1);
@@ -182,15 +185,54 @@ describe('로그인 실패 시 재시도 및 계정 일시정지 통합 테스�
 
     // 4. 검증: 포스트가 failed 상태여야 함
     const post = await new Promise((resolve) => {
-      db.get('SELECT * FROM posts WHERE id = ?', [postId], (err, row) => resolve(row));
+      db.get('SELECT * FROM posts WHERE id = ?', [postId], (_err, row) => resolve(row));
     });
     expect(post.status).toBe('failed');
 
     // 5. 검증: 계정이 paused 상태이며 실패 횟수가 5인지 확인
     const account = await new Promise((resolve) => {
-      db.get('SELECT * FROM accounts WHERE id = ?', [accountId], (err, row) => resolve(row));
+      db.get('SELECT * FROM accounts WHERE id = ?', [accountId], (_err, row) => resolve(row));
     });
     expect(account.status).toBe('paused');
     expect(account.login_fail_count).toBe(5);
+  });
+
+  describe('updateAccountStatusOnFailure 유닛 테스트', () => {
+    it('호출 시 실패 카운트가 1 증가하고 계정 상태는 active를 유지해야 한다', async () => {
+      const account = { id: accountId, naver_id: 'retry_naver_id', user_id: userId };
+      const post = { user_id: userId };
+      const error = new Error('자동 로그인 실패(캡차 요구)');
+
+      const finalCount = await updateAccountStatusOnFailure(account, post, error);
+      expect(finalCount).toBe(1);
+
+      const dbAccount = await new Promise((resolve) => {
+        db.get('SELECT * FROM accounts WHERE id = ?', [accountId], (_err, row) => resolve(row));
+      });
+      expect(dbAccount.login_fail_count).toBe(1);
+      expect(dbAccount.status).toBe('active');
+    });
+
+    it('누적 실패가 4회인 상태에서 호출되면 실패 카운트가 5가 되고 상태가 paused로 변경되어야 한다', async () => {
+      // 실패 횟수를 4회로 조작
+      await new Promise((resolve) => {
+        db.run('UPDATE accounts SET login_fail_count = 4 WHERE id = ?', [accountId], () =>
+          resolve(),
+        );
+      });
+
+      const account = { id: accountId, naver_id: 'retry_naver_id', user_id: userId };
+      const post = { user_id: userId };
+      const error = new Error('자동 로그인 실패(비밀번호 오류)');
+
+      const finalCount = await updateAccountStatusOnFailure(account, post, error);
+      expect(finalCount).toBe(5);
+
+      const dbAccount = await new Promise((resolve) => {
+        db.get('SELECT * FROM accounts WHERE id = ?', [accountId], (_err, row) => resolve(row));
+      });
+      expect(dbAccount.login_fail_count).toBe(5);
+      expect(dbAccount.status).toBe('paused');
+    });
   });
 });

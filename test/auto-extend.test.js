@@ -1,18 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import db from '../src/server/db/database.js';
-import * as aiService from '../src/server/services/ai-service.js';
 import { checkAndExtendKeywordQueue } from '../src/server/services/scheduler.js';
 
 // ai-service 모킹
 vi.mock('../src/server/services/ai-service.js', () => ({
-  generateContent: vi.fn().mockImplementation(async (engine, config, keyword) => ({
+  generateContent: vi.fn().mockImplementation(async (_engine, _config, keyword) => ({
     title: `AI 제목: ${keyword}`,
     content: `AI 본문: ${keyword} 에 대한 내용입니다.`,
   })),
   generateTagsWithGemini: vi.fn().mockResolvedValue('태그1,태그2'),
-  generateNextKeyword: vi.fn().mockImplementation(async (engine, config, title, content) => {
+  generateNextKeyword: vi.fn().mockImplementation(async (_engine, _config, title, _content) => {
     // 단순 모킹: 'AI 제목: ' 뒷부분을 가져와 연관 키워드인 것처럼 처리
-    return title.replace('AI 제목: ', '') + ' 연관';
+    return `${title.replace('AI 제목: ', '')} 연관`;
   }),
 }));
 
@@ -63,7 +62,7 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
 
     // DB 검증: 추가 생성된 건이 없어야 함 (총 2개 유지)
     const rows = await new Promise((resolve) => {
-      db.all('SELECT * FROM posts WHERE user_id = ?', [userId], (err, rows) => resolve(rows));
+      db.all('SELECT * FROM posts WHERE user_id = ?', [userId], (_err, rows) => resolve(rows));
     });
 
     expect(rows.length).toBe(2);
@@ -163,7 +162,7 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
       db.all(
         'SELECT * FROM posts WHERE user_id = ? ORDER BY scheduled_at ASC',
         [userId],
-        (err, rows) => resolve(rows),
+        (_err, rows) => resolve(rows),
       );
     });
 
@@ -188,7 +187,7 @@ describe('자동 꼬리물기 대기열 연장 기능 테스트', () => {
 
     // DB 검증: 추가 생성된 건이 없어야 함 (총 1개 유지 - 과거 완료 건만 있음)
     const rows = await new Promise((resolve) => {
-      db.all('SELECT * FROM posts WHERE user_id = ?', [userId], (err, rows) => resolve(rows));
+      db.all('SELECT * FROM posts WHERE user_id = ?', [userId], (_err, rows) => resolve(rows));
     });
 
     expect(rows.length).toBe(1);
