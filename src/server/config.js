@@ -17,7 +17,10 @@ try {
   // Electron이 아닐 경우 OS별 기본 AppData 디렉토리 사용 (CWD 방지 및 데이터 공유 보장)
   const appName = 'naver-auto';
   if (process.platform === 'win32') {
-    userDataPath = path.join(process.env.APPDATA || path.join(process.env.USERPROFILE || 'C:', 'AppData', 'Roaming'), appName);
+    userDataPath = path.join(
+      process.env.APPDATA || path.join(process.env.USERPROFILE || 'C:', 'AppData', 'Roaming'),
+      appName,
+    );
   } else if (process.platform === 'darwin') {
     userDataPath = path.join(process.env.HOME || '', 'Library', 'Application Support', appName);
   } else {
@@ -38,4 +41,5 @@ export const CONFIG = {
   SECRET_KEY: process.env.SECRET_KEY || 'default-secret-key',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   HEADLESS: process.env.HEADLESS !== 'false',
+  POSTING_TIMEOUT: process.env.POSTING_TIMEOUT ? parseInt(process.env.POSTING_TIMEOUT, 10) : 600000,
 };

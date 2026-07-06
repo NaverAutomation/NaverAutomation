@@ -197,13 +197,15 @@ export async function postToNaver(account, post, options = {}) {
     };
 
     const timeoutPromise = new Promise((_, reject) => {
+      const timeoutMs = CONFIG.POSTING_TIMEOUT || 600000;
+      const timeoutMinutes = Math.round(timeoutMs / 60000);
       postTimeoutId = setTimeout(() => {
         reject(
           new Error(
-            '전체 포스팅 타임아웃(3분 초과). 좀비 프로세스 방지를 위해 브라우저를 강제 종료합니다.',
+            `전체 포스팅 타임아웃(${timeoutMinutes}분 초과). 좀비 프로세스 방지를 위해 브라우저를 강제 종료합니다.`,
           ),
         );
-      }, 180000);
+      }, timeoutMs);
     });
 
     const result = await Promise.race([mainAction(), timeoutPromise]);
