@@ -19,6 +19,7 @@ function cleanupOldPublishedPosts(userId) {
 // 스케줄러 상태
 let schedulerInterval = null;
 let isRunning = false;
+let isProcessingScheduled = false;
 let activeWorkers = 0;
 const MAX_WORKERS = 3;
 let io = null; // Socket.io 인스턴스
@@ -154,8 +155,10 @@ export function getSchedulerStatus() {
 }
 
 export async function processScheduledPosts() {
+  if (isProcessingScheduled) return;
   if (activeWorkers >= MAX_WORKERS) return;
 
+  isProcessingScheduled = true;
   try {
     // 0. 각 유저별 키워드 대기열 자동 꼬리물기 연장 체크
     await new Promise((resolve) => {
@@ -461,6 +464,8 @@ export async function processScheduledPosts() {
     );
   } catch (err) {
     emitLog('error', `스케줄러 작업 처리 중 치명적 오류: ${err.message}`);
+  } finally {
+    isProcessingScheduled = false;
   }
 }
 

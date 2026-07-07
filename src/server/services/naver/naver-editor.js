@@ -68,7 +68,7 @@ export async function fillEditorTitle(page, title) {
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Backspace');
 
-    await page.keyboard.type(cleanTitle, { delay: 30 });
+    await page.keyboard.insertText(cleanTitle);
     console.log('Title input completed.');
   } catch (e) {
     console.warn('Title input failed, trying fallback...', e.message);
@@ -77,7 +77,7 @@ export async function fillEditorTitle(page, title) {
       await titleAreaFallback.click({ force: true });
       await page.keyboard.press('Control+A');
       await page.keyboard.press('Backspace');
-      await page.keyboard.type(title, { delay: 30 });
+      await page.keyboard.insertText(title);
     } catch (e2) {
       console.error('Title input critical failure:', e2.message);
     }
@@ -203,12 +203,12 @@ export async function fillEditorContent(page, content) {
       });
     });
 
-    await page.keyboard.type(cleanContent, { delay: 10 });
+    await page.keyboard.insertText(cleanContent);
     console.log('Content input completed.');
   } catch (e) {
     console.warn('Content input failed, trying fallback (Tab)...', e.message);
     await page.keyboard.press('Tab');
-    await page.keyboard.type(cleanContent, { delay: 10 });
+    await page.keyboard.insertText(cleanContent);
   }
 }
 
@@ -372,5 +372,24 @@ export async function publishPostAction(page, tags = []) {
     throw new Error('최종 발행 버튼을 찾을 수 없습니다.');
   }
 
-  await page.waitForTimeout(4000);
+  // 최종 발행 버튼 클릭 후, 에디터 페이지를 탈출하여 실제 블로그 글 상세/목록 페이지로 리다이렉트될 때까지 대기
+  console.log('Waiting for redirect to final post URL...');
+  try {
+    await page.waitForURL(
+      (url) => {
+        const urlStr = url.toString();
+        return (
+          urlStr.includes('blog.naver.com') &&
+          !urlStr.includes('editor.blog.naver.com') &&
+          !urlStr.includes('Redirect=Write') &&
+          !urlStr.includes('Write.naver')
+        );
+      },
+      { timeout: 20000 }, // 20초 대기
+    );
+    console.log('Successfully redirected to:', page.url());
+  } catch (_redirectErr) {
+    console.error('Redirect failed. Actual publishing might have failed.');
+    throw new Error('최종 발행 후 리다이렉트 대기 시간 초과. 발행 실패 가능성');
+  }
 }
