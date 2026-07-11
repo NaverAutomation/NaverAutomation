@@ -9,6 +9,21 @@ const SettingsTab = React.memo(
     const [repImages, setRepImages] = useState([]);
     const fileInputRef = React.useRef(null);
 
+    const devClicksRef = React.useRef(0);
+    const [showDevOptions, setShowDevOptions] = useState(() => {
+      return localStorage.getItem('devModeEnabled') === 'true';
+    });
+
+    const handleNoticeClick = () => {
+      if (showDevOptions) return;
+      devClicksRef.current += 1;
+      if (devClicksRef.current >= 5) {
+        setShowDevOptions(true);
+        localStorage.setItem('devModeEnabled', 'true');
+        alert('🔓 개발자 설정 모드가 활성화되었습니다. 설정 저장 시 반영됩니다.');
+      }
+    };
+
     useEffect(() => {
       let isMounted = true;
       const loadSettings = async () => {
@@ -158,7 +173,10 @@ const SettingsTab = React.memo(
               ></path>
             </svg>
             <div>
-              <p className="font-bold mb-1">안내 사항</p>
+              {/* biome-ignore lint/a11y/useKeyWithClickEvents: Easter egg trigger */}
+              <p className="font-bold mb-1 cursor-pointer select-none" onClick={handleNoticeClick}>
+                안내 사항
+              </p>
               <ul className="list-disc pl-4 space-y-1">
                 <li>AI API 키는 서버에서 안전하게 관리되므로 별도로 입력할 필요가 없습니다.</li>
                 <li>
@@ -170,6 +188,30 @@ const SettingsTab = React.memo(
               </ul>
             </div>
           </div>
+
+          {showDevOptions && (
+            <div className="mt-4 p-4 border border-warning/30 bg-warning/5 rounded-xl space-y-2">
+              <div className="text-xs font-bold text-warning/80">🛠️ 개발자 설정 모드</div>
+              <div className="form-control">
+                <label className="label cursor-pointer justify-start gap-3 py-1">
+                  <input
+                    type="checkbox"
+                    className="toggle toggle-warning toggle-sm"
+                    checked={localSettings.disable_headless === 'true'}
+                    onChange={(e) =>
+                      setLocalSettings((prev) => ({
+                        ...prev,
+                        disable_headless: e.target.checked ? 'true' : 'false',
+                      }))
+                    }
+                  />
+                  <span className="label-text font-semibold text-xs text-base-content/80">
+                    헤드리스 모드 비활성화 (포스팅 진행 시 브라우저 화면 표시)
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
         </div>
 
         <SectionTitle className="mt-8">📸 대표 이미지 풀(Pool) 관리</SectionTitle>

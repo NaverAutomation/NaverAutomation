@@ -60,6 +60,30 @@ export async function postToNaver(account, post, options = {}) {
       let effectiveHeadless =
         typeof options.headless === 'boolean' ? options.headless : CONFIG.HEADLESS;
 
+      if (post.user_id) {
+        try {
+          const dbRow = await new Promise((resolve) => {
+            db.get(
+              "SELECT value FROM settings WHERE user_id = ? AND key = 'disable_headless'",
+              [post.user_id],
+              (err, row) => {
+                if (err) resolve(null);
+                else resolve(row || null);
+              },
+            );
+          });
+          if (dbRow && dbRow.value === 'true') {
+            console.log('[개발자 모드] 헤드리스 모드가 비활성화되었습니다 (설정 기준).');
+            if (onProgress) {
+              onProgress('info', '개발자 설정: 헤드리스 모드 비활성화(화면 표시) 적용됨');
+            }
+            effectiveHeadless = false;
+          }
+        } catch (dbErr) {
+          console.error('[개발자 모드] 설정 조회 실패:', dbErr);
+        }
+      }
+
       if (process.env.NODE_ENV === 'development') {
         console.log(
           '[개발 모드] 브라우저 화면 표시를 위해 헤드리스 모드를 자동으로 비활성화합니다.',
