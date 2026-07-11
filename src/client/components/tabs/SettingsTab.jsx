@@ -15,12 +15,18 @@ const SettingsTab = React.memo(
     });
 
     const handleNoticeClick = () => {
-      if (showDevOptions) return;
       devClicksRef.current += 1;
       if (devClicksRef.current >= 5) {
-        setShowDevOptions(true);
-        localStorage.setItem('devModeEnabled', 'true');
-        alert('🔓 개발자 설정 모드가 활성화되었습니다. 설정 저장 시 반영됩니다.');
+        if (showDevOptions) {
+          setShowDevOptions(false);
+          localStorage.removeItem('devModeEnabled');
+          alert('🔒 개발자 설정 모드가 비활성화되었습니다. 설정 저장 시 반영됩니다.');
+        } else {
+          setShowDevOptions(true);
+          localStorage.setItem('devModeEnabled', 'true');
+          alert('🔓 개발자 설정 모드가 활성화되었습니다. 설정 저장 시 반영됩니다.');
+        }
+        devClicksRef.current = 0;
       }
     };
 
