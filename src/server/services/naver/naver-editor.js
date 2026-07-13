@@ -251,7 +251,9 @@ export async function inputTags(page, tags) {
   const tagList = Array.isArray(tags)
     ? tags
     : tags
-        .split(',')
+        .replace(/#/g, ' ')
+        .replace(/,/g, ' ')
+        .split(/\s+/)
         .map((t) => t.trim())
         .filter(Boolean);
   if (tagList.length === 0) return;

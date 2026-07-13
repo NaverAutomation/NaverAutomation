@@ -205,12 +205,15 @@ export async function postToNaver(account, post, options = {}) {
       if (onProgress) onProgress('info', '제목 작성 중...');
       await fillEditorTitle(page, post.title);
 
-      // 대표 이미지 및 본문 이미지 업로드 처리
+      // 1. 대표 이미지 업로드 및 본문 이미지 목록 획득
       const contentImages = await handleRepresentativeImages(page, post, onProgress);
-      await handleContentImages(page, post, contentImages, onProgress);
 
+      // 2. 본문 내용 작성 (대표 사진 밑에 글이 오도록 설정)
       if (onProgress) onProgress('info', '본문 내용 작성 중...');
       await fillEditorContent(page, post.content);
+
+      // 3. 본문 이미지(이외 사진) 업로드 처리 (본문 글 밑에 오도록 설정)
+      await handleContentImages(page, post, contentImages, onProgress);
 
       await removeStrikethrough(page);
 
