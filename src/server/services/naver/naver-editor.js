@@ -68,7 +68,7 @@ export async function fillEditorTitle(page, title) {
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Backspace');
 
-    await page.keyboard.insertText(cleanTitle);
+    await page.keyboard.type(cleanTitle, { delay: 30 });
     console.log('Title input completed.');
   } catch (e) {
     console.warn('Title input failed, trying fallback...', e.message);
@@ -77,7 +77,7 @@ export async function fillEditorTitle(page, title) {
       await titleAreaFallback.click({ force: true });
       await page.keyboard.press('Control+A');
       await page.keyboard.press('Backspace');
-      await page.keyboard.insertText(title);
+      await page.keyboard.type(title, { delay: 30 });
     } catch (e2) {
       console.error('Title input critical failure:', e2.message);
     }
@@ -203,12 +203,12 @@ export async function fillEditorContent(page, content) {
       });
     });
 
-    await page.keyboard.insertText(cleanContent);
+    await page.keyboard.type(cleanContent, { delay: 10 });
     console.log('Content input completed.');
   } catch (e) {
     console.warn('Content input failed, trying fallback (Tab)...', e.message);
     await page.keyboard.press('Tab');
-    await page.keyboard.insertText(cleanContent);
+    await page.keyboard.type(cleanContent, { delay: 10 });
   }
 }
 
